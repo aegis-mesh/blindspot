@@ -62,10 +62,17 @@ if ($OptAcctRun) {
     try { if (@('S-1-5-18', 'S-1-5-19', 'S-1-5-20') -contains [Security.Principal.WindowsIdentity]::GetCurrent().User.Value) { exit 13 } } catch { exit 13 }
   }
   $OptOffline = $true; $OptSave = $false; $OptNoColor = $true; $OptFull = $true; $OptAll = $false; $OptAllSess = $true
-  # The session check stops at three quarters of the time gird-fleet.ps1 gives the run, so what was
-  # found still reaches it, with the sessions partly checked. Its ripgrep is stopped then even while the
-  # rest of the check is still busy, so the run leaves no process behind when gird-fleet.ps1 stops it.
-  if ($AccountSeconds -match '^[0-9]{1,5}$') { $AcctEnd = [DateTime]::UtcNow.AddSeconds([int]$AccountSeconds * 3 / 4); $AcctDeadline = [DateTime]::UtcNow.AddSeconds([int]$AccountSeconds) }
+  # The session check is told to stop at three quarters of the time gird-fleet.ps1 gives the run. Its
+  # ripgrep is stopped then even while the rest of the check is still busy, so the run leaves no process
+  # behind when gird-fleet.ps1 stops it. A session check that does not end when told (blocked in a read)
+  # is waited for until the time less a margin (10 seconds, or a tenth of the time when that is more),
+  # and no longer: this run starts later than gird-fleet.ps1's clock, so it must print well before the
+  # limit for what it found to reach gird-fleet.ps1, with the sessions partly checked.
+  if ($AccountSeconds -match '^[0-9]{1,5}$') {
+    $acctS = [int]$AccountSeconds; $acctT0 = [DateTime]::UtcNow
+    $AcctEnd = $acctT0.AddSeconds($acctS * 3 / 4)
+    $AcctDeadline = $acctT0.AddSeconds([Math]::Max($acctS * 3 / 4, $acctS - [Math]::Max(10, $acctS / 10)))
+  }
   $AcctOut = [Console]::Out
   [Console]::SetOut([IO.TextWriter]::Null); [Console]::SetError([IO.TextWriter]::Null)
 }
@@ -777,7 +784,7 @@ $AaFiles = New-Object System.Collections.Generic.List[string]
 $VscSettings = New-Object System.Collections.Generic.List[string]
 $AkLinks = New-Object System.Collections.Generic.List[string]
 $Sites = New-Object System.Collections.Generic.List[string]
-# Folders the scan could not read: the files in them were not checked (sections 2 to 5 say so).
+# Folders the scan could not read: the files in them were not checked (sections 1 to 5 say so).
 $UnreadDirs = New-Object System.Collections.Generic.List[string]
 $script:ScanN = 0
 function Is-Pruned([string]$path, [string]$name, [int]$depth) {
@@ -1307,14 +1314,17 @@ $SessWorker = {
     $p = Key-Provider $k
     if ($p -and -not (Made-Up $k) -and -not (Is-CliOwnKey $f $k) -and -not $st.Seen.ContainsKey("$f`t$p")) { $st.Seen["$f`t$p"] = 1; [void]$st.Hits.Add("$f`t$p") } }
   # Tests only: the .NET engine waits while the file named exists; rg.exe gets it as one more root,
-  # so a pipe nobody writes to holds it, as gird-check.sh's ripgrep is held.
-  if ($hold -and -not $rg) { while ((Test-Path -LiteralPath $hold) -and -not $st.Stop) { Start-Sleep -Milliseconds 50 } }
+  # so a pipe nobody writes to holds it, as gird-check.sh's ripgrep is held. With
+  # GIRD_CHECK_TEST_SESSIONS_DEAF set it waits on when told to stop, as a check blocked in a read would.
+  if ($hold -and -not $rg) { while ((Test-Path -LiteralPath $hold) -and (-not $st.Stop -or $env:GIRD_CHECK_TEST_SESSIONS_DEAF)) { Start-Sleep -Milliseconds 50 } }
   if ($rg) {
     $q = { param($a) '"' + (($a -replace '(\\*)"', '$1$1\"') -replace '(\\+)$', '$1$1') + '"' }
     $pf = $null
     $halt = { $st.Stop = $true; $st.Stopped = $true; try { $st.Proc.Kill() } catch { }; $gone = $false; try { $gone = $st.Proc.WaitForExit(2000) } catch { }; if (-not $gone) { $st.Hung = $true } }
     # One run for each pass of data/keys.tsv ($keys), one after the other; RgExit is the worst of
-    # their codes: 2 for an error, else 0 when any found a key. The deadline ($stopAt) covers them all.
+    # their codes: an error (any code but 0 and 1: a crashed rg.exe's is negative), else 0 when any
+    # found a key. A pass that can't start or be read after an earlier one ran is an error too, -1,
+    # so the sessions read partly checked. The deadline ($stopAt) covers them all.
     $first = $true; $worst = 1
     try { foreach ($kp in $keys) {
       if ($st.Stop) { break }
@@ -1354,9 +1364,9 @@ $SessWorker = {
       if ($i -ge 0) { & $hit ($frag + $l.Substring(0, $i)) $l.Substring($i + 1) }
       $ms = $graceMs; if ($null -ne $stopAt) { $ms = [int][Math]::Max(0, [Math]::Min(2147483647, ($stopAt - [DateTime]::UtcNow).TotalMilliseconds)) }
       if (-not $st.Proc.WaitForExit($ms)) { & $halt; return }
-      if (-not $st.Stop) { $c = $st.Proc.ExitCode; if ($c -gt 1) { $worst = $c } elseif ($c -eq 0 -and $worst -le 1) { $worst = 0 }; $st.RgExit = $worst }
+      if (-not $st.Stop) { $c = $st.Proc.ExitCode; if ($c -ne 0 -and $c -ne 1) { $worst = $c } elseif ($c -eq 0 -and $worst -eq 1) { $worst = 0 }; $st.RgExit = $worst }
     }
-    } catch { if ($null -eq $st.Proc) { $st.Failed = $true } } finally {
+    } catch { if ($null -eq $st.Proc) { $st.Failed = $true } else { $st.RgExit = -1 } } finally {
       if ($st.Proc) { try { if (-not $st.Proc.HasExited) { & $halt } } catch { } }
       if ($pf) { Remove-Item -LiteralPath $pf -ErrorAction SilentlyContinue }
     }
@@ -2951,9 +2961,10 @@ Login (J $HomeDir '.local/share/opencode/auth.json') 'OpenCode provider keys' 'o
 Login (J $HomeDir '.railway/config.json') 'Railway login' 'railway'
 # Data platforms' own files, found as gird-check.sh finds them: Databricks configuration profiles, dbt's
 # profiles.yml (a value taken from env_var is not in the file), and Snowflake's connections.toml and
-# config.toml in the folder Snowflake CLI picks.
-Login (J $HomeDir '.databrickscfg') 'Databricks logins' 'databricks' '(?m)^[ \t]*(token|client_secret)[ \t]*='
-Login (J (Env-Or 'DBT_ENGINE_PROFILES_DIR' (Env-Or 'DBT_PROFILES_DIR' (J $HomeDir '.dbt'))) 'profiles.yml') 'dbt warehouse passwords' 'dbt' '(?m)^[ \t]*(password|token|private_key_passphrase|client_secret|refresh_token)[ \t]*:[ \t]*["'']?[A-Za-z0-9_+/=.~-]'
+# config.toml in the folder Snowflake CLI picks, each listed when a line sets one of the secrets
+# gird-check.sh names.
+Login (J $HomeDir '.databrickscfg') 'Databricks logins' 'databricks' '(?m)^[ \t]*(token|client_secret|azure_client_secret|password)[ \t]*='
+Login (J (Env-Or 'DBT_ENGINE_PROFILES_DIR' (Env-Or 'DBT_PROFILES_DIR' (J $HomeDir '.dbt'))) 'profiles.yml') 'dbt warehouse passwords' 'dbt' '(?m)^[ \t]*(password|token|private_key|private_key_passphrase|client_secret|refresh_token)[ \t]*:[ \t]*["'']?[A-Za-z0-9_+/=.~-]'
 $sf = $null
 if ($env:SNOWFLAKE_HOME) { if (Is-Dir $env:SNOWFLAKE_HOME) { $sf = $env:SNOWFLAKE_HOME } }
 elseif (Is-Dir (J $HomeDir '.snowflake')) { $sf = J $HomeDir '.snowflake' }
@@ -2964,7 +2975,7 @@ if (-not $sf) {
   elseif ((Get-Variable IsMacOS -ValueOnly -ErrorAction SilentlyContinue)) { $sf = J $HomeDir 'Library/Application Support/snowflake' }
   else { $sf = J (Env-Or 'XDG_CONFIG_HOME' (J $HomeDir '.config')) 'snowflake' }
 }
-Login @((J $sf 'connections.toml'), (J $sf 'config.toml')) 'Snowflake logins' 'snowflake' '(?m)^[ \t]*(password|private_key_passphrase)[ \t]*='
+Login @((J $sf 'connections.toml'), (J $sf 'config.toml')) 'Snowflake logins' 'snowflake' '(?m)^[ \t]*(password|token|oauth_client_secret|private_key_raw|private_key_passphrase|private_key_file_pwd)[ \t]*='
 $N_SSH = 0; $N_SSH_OPEN = 0
 $SshDir = J $HomeDir '.ssh'
 if (Is-Dir $SshDir) {
@@ -7772,7 +7783,8 @@ $NpmIncs = @($BadNpm -split "`r?`n" | ForEach-Object { @($_ -split ' ')[2] })
 $ExtKey = New-Object System.Collections.Generic.List[object]; $ExtKeyTags = New-Object System.Collections.Generic.List[string]; $SshkUnread = 0
 $sshDir = J $HomeDir '.ssh'; $akf = J $sshDir 'authorized_keys'; $akt = $null
 if (Exists $akf) {
-  if (Is-Dir $akf) { $SshkUnread = 1 } else { try { $akt = [IO.File]::ReadAllText($akf) } catch { $SshkUnread = 1 } }
+  # A pipe or device (Is-Special) and a file over ReadMax are not read either, as in gird-check.sh.
+  if ((Is-Dir $akf) -or (Is-Special $akf) -or (Too-Big $akf)) { $SshkUnread = 1 } else { try { $akt = [IO.File]::ReadAllText($akf) } catch { $SshkUnread = 1 } }
 } elseif (Is-Dir $sshDir) {
   # Not there, or there and out of reach: a .ssh folder that can't be listed, or that lists the file
   # but can't be entered, or a link to nothing.
@@ -8201,7 +8213,16 @@ if ($MAL_LOCKONLY -eq 1) {
   if ($N_LOCKPROJ -eq 1) { $lp = 'the project'; $ll = 'its lockfile' } else { $lp = 'the projects'; $ll = 'their lockfiles' }
   Add-Todo 5 "If you ran an install in $lp section 5 lists, treat this machine as compromised: from another computer, rotate every key this machine could reach, then clear npm's cache with npm cache clean --force. If not, update $ll to a version without the malware."
 }
-if ($ExtCheck.Count -gt 0) { Add-Todo 5 'Open the startup file listed in section 5 and check what it starts at login. If you did not set it up yourself, treat this machine as compromised: delete it and rotate every key this machine could reach.' }
+# A startup file named like one of an incident whose own fix starts with "First" (what it leaves must
+# go before any key is rotated, as claudeext's sysmon.cmd on Windows): that fix comes ahead of the rotate.
+if ($ExtCheck.Count -gt 0) {
+  $xf = New-Object System.Collections.Generic.List[string]
+  foreach ($t in ($ExtCheckTags | Sort-Object -CaseSensitive)) { $a = Incident-Advice $t; if ($a.StartsWith('First ', [StringComparison]::Ordinal) -and -not $xf.Contains($a)) { $xf.Add($a) } }
+  if ($xf.Count -gt 0) {
+    $xf[0] = 'f' + $xf[0].Substring(1)
+    Add-Todo 5 "Open the startup file listed in section 5 and check what it starts at login. If you did not set it up yourself, $($xf -join ' ') After that, treat this machine as compromised: delete it and rotate every key this machine could reach."
+  } else { Add-Todo 5 'Open the startup file listed in section 5 and check what it starts at login. If you did not set it up yourself, treat this machine as compromised: delete it and rotate every key this machine could reach.' }
+}
 if ($LITELLM_HIT -eq 0 -and $LitePyc.Count -gt 0) { Add-Todo 5 'A leftover cook.pyc can come from the LiteLLM 1.107.0 malware. If litellm 1.107.0 was ever installed there, treat this machine as compromised, follow LiteLLM''s advisory and rotate every key it could reach.' }
 Add-Advice 'lock'
 Add-Advice 'update'
@@ -8278,7 +8299,12 @@ if ($OptAcctRun) {
     $fNpm = @($NpmTags | Where-Object { (Incident-Level $_) -ne 'act' })
   }
   $fPoss = @(); if ($LitePyc.Count -gt 0 -and $LITELLM_HIT -eq 0) { $fPoss = @('litellm') }
-  $fNr = $KeyUnread.Count + $Sec2Unread.Count + $AllowUnread.Count + $NpmUnread + $LockUnread.Count + $NpmSlow + $SlowFiles.Count + $ExtUnread + $PyUnread + $UnreadDirs.Count + $NmUnread.Count
+  # Every file or folder not read in full, each once whichever lists hold it (a project's unreadable
+  # settings.local.json is in three), as gird-check.sh counts each line of FLEET_NR and SEC2_UNREAD once,
+  # then the counts: ~/.ssh/authorized_keys and the workflows not read among them.
+  $fNrSet = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::Ordinal)
+  foreach ($fl in $KeyUnread, $Sec2Unread, $AllowUnread, $LockUnread, $SlowFiles, $UnreadDirs, $NmUnread) { foreach ($f in $fl) { if ($f) { [void]$fNrSet.Add([string]$f) } } }
+  $fNr = $fNrSet.Count + $NpmUnread + $NpmSlow + $ExtUnread + $PyUnread + $SshkUnread + $ActUnread
   $fEngine = $SessEngine; if ($fEngine -eq 'net') { $fEngine = 'dotnet' }
   $fSp = 0; if ($SESS_PARTIAL) { $fSp = 1 }
   # The run starts with -NoProfile, so a variable a profile sets is not followed. The profiles are read
@@ -8844,11 +8870,11 @@ if ($Act) {
 }
 $HeadShort = Take-Cap
 Wrap $Stats 4 "  $Sev$gBar$cRst " "  $Sev$gBar$cRst " $cDim
-# Folders the home scan could not read, so sections 2 to 5 did not read the files in them.
+# Folders the home scan could not read, so sections 1 to 5 did not read the files in them.
 function Dir-List($dirs) { $da = @($dirs); $dl = (@($da | Select-Object -First 3 | ForEach-Object { Short $_ })) -join ', '; if ($da.Count -gt 3) { $dl += " and $($da.Count - 3) more" }; $dl }
 if ($UnreadDirs.Count -gt 0) {
-  if ($UnreadDirs.Count -eq 1) { $udText = '1 folder in your home could not be read, so sections 2 to 5 did not check the files in it' }
-  else { $udText = "$($UnreadDirs.Count) folders in your home could not be read, so sections 2 to 5 did not check the files in them" }
+  if ($UnreadDirs.Count -eq 1) { $udText = '1 folder in your home could not be read, so sections 1 to 5 did not check the files in it' }
+  else { $udText = "$($UnreadDirs.Count) folders in your home could not be read, so sections 1 to 5 did not check the files in them" }
   Wrap "$($udText): $(Dir-List $UnreadDirs)." 4 "  $cYel$gBar$cRst " "  $cYel$gBar$cRst " $cYel
 }
 if ($OwCodes) { Blank; Emit "   ${cBold}OWASP Agentic Top 10:$cRst $OwCodes" }
@@ -8945,7 +8971,7 @@ if ($N_LOOK -gt 0) {
   Emit "     ${cBold}Files named like the ones worms plant$cRst"
   foreach ($f in $WormLook) {
     Emit "     $cYel!$cRst  $(Short $f)"
-    Wrap "Named like $(Planted-Note (Planted-Rel $f)), with nothing else of theirs beside it. If you didn't put it there, read it before an agent or editor opens this folder." 8 '        ' '        ' $cDim
+    Wrap "Named like $(Planted-Note (Planted-Rel $f)), but no file that only the malware uses is beside it. If you didn't put it there, read it before an agent or editor opens this folder." 8 '        ' '        ' $cDim
   }
 }
 if ($N_AK -gt 0) {
@@ -9206,7 +9232,11 @@ if ($EXT_HIT -eq 1) {
 } elseif ($SshkUnread -eq 1) {
   Pair "$cYel!$cRst" 'Editor extensions' 16 "${cYel}not fully checked: ~/.ssh/authorized_keys could not be read$cRst"
 } else {
-  Pair "$cGrn$gOk$cRst" 'Editor extensions' 16 "none of $(@($BadExtRows | Where-Object { $_[1] -ne '*' }).Count) bad versions or $(@($BadExtRows | Where-Object { $_[1] -eq '*' }).Count) bad extensions"
+  # A startup file of an extension incident (~/.config/.smt) is looked for by its path: under a folder
+  # in the home that could not be read, whether it is there can't be told, as the Python rows say.
+  $xNone = "none of $(@($BadExtRows | Where-Object { $_[1] -ne '*' }).Count) bad versions or $(@($BadExtRows | Where-Object { $_[1] -eq '*' }).Count) bad extensions"
+  if ($HOME_PARTIAL -eq 1) { Pair "$cYel!$cRst" 'Editor extensions' 16 "$xNone, but some folders in your home were not read" }
+  else { Pair "$cGrn$gOk$cRst" 'Editor extensions' 16 $xNone }
   Wrap 'checked the extension folders of VS Code, Cursor, Windsurf, Devin Desktop, VSCodium, Kiro, Antigravity and Positron, and ~/.ssh/authorized_keys for an SSH key such malware adds' 26 $ind26 $ind26 $cDim
 }
 # With findings above, a folder that could not be read still has to be said.
@@ -9287,9 +9317,16 @@ function CLine([string]$num, [string]$mark, [string]$label, [string]$detail) {
 # An update-level incident with a fix of its own has a summary for row 05 (data/incidents.tsv).
 $UpdSum = ''
 foreach ($t in $NpmTags) { if ((Incident-Level $t) -ne 'update') { continue }; $us = Incident-Summary $t; if ($us) { $UpdSum = $us; break } }
+# A settings or rules file section 1 reads for its findings that is there but was not read, or a rules
+# file not read in full: section 2 names it, and row 01 does not read clean over it.
+$ruleUnread = New-Object System.Collections.Generic.List[string]
+foreach ($f in (Unread-Files (@($aaTried) + @($rcTried)) $true)) { if (-not $ruleUnread.Contains($f)) { $ruleUnread.Add($f) } }
+foreach ($f in $rcCuts) { if ($f -and -not $ruleUnread.Contains($f)) { $ruleUnread.Add($f) } }
+$N_RULE_UNREAD = $ruleUnread.Count
 if ($N_OLD -gt 0) { $G1 = "$cYel!$cRst"; $D1 = "$N_AG found, $(Plural $N_OLD 'security fix' 'security fixes') to install" }
 elseif ($N_YOLO -gt 0) { $G1 = "$cYel!$cRst"; $D1 = "$N_AG found, $N_YOLO_AG set to run commands without asking" }
 elseif ($N_REMOTE -gt 0) { $G1 = "$cYel!$cRst"; $D1 = "$N_AG found, rules let $(Plural $N_REMOTE_AG 'agent' 'agents') run commands on other machines" }
+elseif ($N_RULE_UNREAD -gt 0) { $G1 = "$cYel!$cRst"; $D1 = "$N_AG found, but $(Plural $N_RULE_UNREAD 'settings file' 'settings files') could not be read" }
 elseif ($N_AG -eq 0) { $G1 = "$cDim$gMid$cRst"; $D1 = 'none found' }
 elseif ($N_IDLE -gt 0) { $G1 = "$cYel$gRing$cRst"; $D1 = "$N_AG found, $N_IDLE idle: $(First-Names $IdleNames 2)" }
 else { $G1 = "$cGrn$gOk$cRst"; $D1 = "$N_AG found, all used in the last 30 days" }

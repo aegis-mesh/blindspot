@@ -359,6 +359,14 @@ SKIPPING=$NORG
 psrun "$SE/unread" PATH="$WORK/bin:$SE/rgbin" GIRD_CHECK_SESSIONS_ENGINE=rg -- -Offline 2>&1 | tr -s ' \n' '  ' > "$SE/unread-rg.txt"
 has    "rg: an unreadable session means partly checked" 'Agent sessions were partly checked' "$SE/unread-rg.txt"
 SKIPPING=""
+# A later pass whose ripgrep can't start, after the first ran: a stand-in that finds nothing and
+# deletes itself. That pass's keys were not looked for, so the sessions are partly checked.
+mkdir -p "$SE/pass2/.claude/projects/p" "$SE/pass2/AppData/Roaming" "$SE/pass2/AppData/Local/Temp" "$SE/pass2bin"; printf '{}\n' > "$SE/pass2/.claude/projects/p/a.jsonl"
+printf '#!/bin/bash\n[ "$1" = --version ] && { echo "ripgrep 14.1.0"; exit 0; }\n/bin/rm -f "$0"; exit 1\n' > "$SE/pass2bin/rg"; chmod +x "$SE/pass2bin/rg"
+psrun "$SE/pass2" PATH="$WORK/bin:$SE/pass2bin" GIRD_CHECK_SESSIONS_ENGINE=rg -- -Offline -AllSessions 2>&1 | tr -s ' \n' '  ' > "$SE/pass2.txt"
+if [ -e "$SE/pass2bin/rg" ]; then bad "rg: a later pass that can't start leaves the sessions partly checked" "the stand-in never ran"
+elif grep -q 'Agent sessions were partly checked' "$SE/pass2.txt" && ! grep -q 'No keys in' "$SE/pass2.txt"; then ok "rg: a later pass that can't start leaves the sessions partly checked"
+else bad "rg: a later pass that can't start leaves the sessions partly checked" "$(grep -o 'No keys in [^.]*\.' "$SE/pass2.txt")"; fi
 # A long token that crosses a 1 MB piece is not mistaken for a key.
 for D in piece esc esc2; do mkdir -p "$SE/$D/.claude/projects/p" "$SE/$D/AppData/Roaming" "$SE/$D/AppData/Local/Temp"; done
 python3 -c "import sys; open(sys.argv[1], 'w').write(' ' * (1048576 - 40) + 'hf_' + 'Kx7Qm2Rt9Lp4Vz8Nw3Hy6Jb5Fc1Gd0SeAuCiEoXkYnZqWdTgPrMsBvLj' + '\n')" "$SE/piece/.claude/projects/p/a.jsonl"
@@ -372,6 +380,16 @@ for E in net rg; do
   has    "$E: a token across a piece boundary is not a key" 'No keys in 1 agent session file' "$SE/piece-$E.txt"
   psrun "$SE/esc" PATH="$WORK/bin:$SE/rgbin" GIRD_CHECK_SESSIONS_ENGINE=$E -- -Offline -AllSessions > "$SE/esc-$E.txt" 2>&1
   has    "$E: a key after an escaped newline at a piece boundary is found" 'Claude Code +1 file: Hugging Face' "$SE/esc-$E.txt"
+done
+SKIPPING=""
+# Two keys on adjacent lines of a raw-text session file: the first key's boundary takes the line
+# break, and the second, at the start of its line, is found all the same, as grep and ripgrep find it.
+mkdir -p "$SE/adj/.claude/paste-cache" "$SE/adj/AppData/Roaming" "$SE/adj/AppData/Local/Temp"
+printf '%s\n%s\n' "h""f_$(rnd 36)" "AK""IA$(upper 16)" > "$SE/adj/.claude/paste-cache/a.txt"
+for E in net rg; do
+  SKIPPING=""; [ "$E" = rg ] && SKIPPING=$NORG
+  psrun "$SE/adj" PATH="$WORK/bin:$SE/rgbin" GIRD_CHECK_SESSIONS_ENGINE=$E -- -Offline -AllSessions > "$SE/adj-$E.txt" 2>&1
+  has    "$E: two keys on adjacent lines of a raw-text session file are both found" 'Claude Code +1 file: (Hugging Face, AWS|AWS, Hugging Face)$' "$SE/adj-$E.txt"
 done
 SKIPPING=""
 # Keys at the start of a line (after a newline, not only at the start of a file), in the middle
@@ -922,7 +940,7 @@ printf 'console.log("tool ready")\n' > "$WORK/msx/code/tool/.claude/execution.js
 printf '{"hooks":{"SessionStart":[{"hooks":[{"type":"command","command":"node .claude/execution.js"}]}]}}\n' > "$WORK/msx/code/tool/.claude/settings.json"
 psrun "$WORK/msx" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/msx.txt"
 hasnot "a lone .claude/execution.js that is not the payload is not malware" 'ACT NOW|signs of npm malware|Treat this machine as compromised|runs a file' "$WORK/msx.txt"
-has    "it is a file to read, named for the Mini Shai-Hulud worm" '! ~/code/tool/\.claude/execution\.js Named like a file the Mini Shai-Hulud worm plants, with nothing else of theirs beside it\.' "$WORK/msx.txt"
+has    "it is a file to read, named for the Mini Shai-Hulud worm" '! ~/code/tool/\.claude/execution\.js Named like a file the Mini Shai-Hulud worm plants, but no file that only the malware uses is beside it\.' "$WORK/msx.txt"
 _es=$("$PWSH" -NoProfile -NonInteractive -Command "$(grep '^function Planted-Sha' "$SCRIPT"); Planted-Sha '.claude/execution.js'" 2>&1)
 if [ "$_es" = 'eb6eb4154b03ec73218727dc643d26f4e14dfda2438112926bb5daf37ae8bcdb 6f933d00b7d05678eb43c90963a80b8947c4ae6830182f89df31da9f568fea95 80a3d2877813968ef847ae73b5eeeb70b9435254e74d7f07d8cf4057f0a710ac' ]; then ok "execution.js counts by the three SHA-256 values Wiz publishes for its payload"
 else bad "execution.js counts by the three SHA-256 values Wiz publishes for its payload" "got: $_es"; fi
@@ -943,7 +961,7 @@ has    "the AntV wave's kitty-monitor service is a sign of its malware" '~/\.con
 has    "and its LaunchAgent"                           '~/Library/LaunchAgents/com\.user\.kitty-monitor\.plist starts the AntV wave.s kitty-monitor backdoor at login' "$WORK/akm.txt"
 has    "and the backdoor they start"                   '~/\.local/share/kitty/cat\.py the AntV wave.s kitty-monitor backdoor, which its service starts at login' "$WORK/akm.txt"
 has    "and the payload copy that the hooks it adds run" '~/\.codex/package/index\.js a copy of the AntV wave.s payload, run by the hooks it adds to agent settings' "$WORK/akm.txt"
-has    "a lone .claude/index.js is a file to read, named for the AntV wave" '! ~/code/i/\.claude/index\.js Named like a file the AntV wave plants, with nothing else of theirs beside it\.' "$WORK/akm.txt"
+has    "a lone .claude/index.js is a file to read, named for the AntV wave" '! ~/code/i/\.claude/index\.js Named like a file the AntV wave plants, but no file that only the malware uses is beside it\.' "$WORK/akm.txt"
 hasnot "index.js in another folder is not listed"      'code/j/' "$WORK/akm.txt"
 # A project can run its own script when an agent session starts or the folder opens, as popular projects
 # do: the report names the script, to check, never as malware. A session-start hook and a folder-open task
@@ -1165,7 +1183,7 @@ printf 'console.log("project ready")\n' > "$WORK/stp/code/tool/.claude/setup.mjs
 printf '{\n  "hooks": {\n    "SessionStart": [{"hooks": [{"type": "command", "command": "node .claude/setup.mjs"}]}]\n  }\n}\n' > "$WORK/stp/code/tool/.claude/settings.json"
 psrun "$WORK/stp" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/stp.txt"
 hasnot "a setup.mjs alone is not called malware" 'ACT NOW|signs of npm malware|Treat this machine as compromised|runs a file' "$WORK/stp.txt"
-has    "section 2 lists it as a file to read (1)" '! ~/code/site/\.vscode/setup\.mjs Named like a file the TanStack, keyv and Mini Shai-Hulud worms plant, with nothing else of theirs beside it\.' "$WORK/stp.txt"
+has    "section 2 lists it as a file to read (1)" '! ~/code/site/\.vscode/setup\.mjs Named like a file the TanStack, keyv and Mini Shai-Hulud worms plant, but no file that only the malware uses is beside it\.' "$WORK/stp.txt"
 has    "section 2 lists it as a file to read (2)" '! ~/code/tool/\.claude/setup\.mjs Named like a file the TanStack, keyv and Mini Shai-Hulud worms plant' "$WORK/stp.txt"
 has    "with a fix to read it"                        'Read the files section 2 lists as named like files worms plant, and delete any you' "$WORK/stp.txt"
 rm -rf "$WORK/stp/code/tool"
@@ -1420,7 +1438,7 @@ has    "a linked .vscode/settings.json is read" '~/p/lnk/\.vscode/settings\.json
 has    "a .claude folder that is a link is read through" '~/p/cdir/\.claude/settings\.json Set to run commands while the agent works' "$WORK/hid.txt"
 has    "and a worm file in it is found" '~/p/cdir/\.claude/router_runtime\.js a file the TanStack and Mini Shai-Hulud worms plant' "$WORK/hid.txt"
 has    "a .vscode folder that is a link is read through" '~/p/vdir/\.vscode/tasks\.json Set to run a task when the folder opens' "$WORK/hid.txt"
-has    "a linked .claude folder that can't be entered is named as not read" '1 folder in your home could not be read, so sections 2 to 5 did not .*the files in it: ~/p/sealed/\.claude\.' "$WORK/hid.txt"
+has    "a linked .claude folder that can't be entered is named as not read" '1 folder in your home could not be read, so sections 1 to 5 did not .*the files in it: ~/p/sealed/\.claude\.' "$WORK/hid.txt"
 hasnot "a .claude link to nothing reads as nothing" 'p/gone/' "$WORK/hid.txt"
 # VS Code reads a task's runOn without case, and runs worktreeCreated tasks when it creates a worktree
 # of the project. Its JSON scanner ends a // comment at U+2028 and U+2029 too, and reads a no-break
@@ -2235,12 +2253,17 @@ chmod 000 "$WORK/ud/code/locked"
 psrun "$WORK/ud" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/ud.txt"
 psrun "$WORK/ud" GIRD_CHECK_COMPACT=1 -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/ud-c.txt"
 chmod 755 "$WORK/ud/code/locked"
-has    "an unreadable folder is named as not checked" '1 folder in your home could not be read, so sections 2 to 5 did not .*the files in it: ~/code/locked\.' "$WORK/ud.txt"
+has    "an unreadable folder is named as not checked" '1 folder in your home could not be read, so sections 1 to 5 did not .*the files in it: ~/code/locked\.' "$WORK/ud.txt"
 has    "and the npm row is not green"                 'npm malware not fully checked: some folders in your home could not be read' "$WORK/ud.txt"
 has    "and the keys row is not green"                'Keys in plain text none found, but some folders were not read' "$WORK/ud-c.txt"
 has    "and the allow lists row is not green"         'Allow lists none found, but some folders were not read' "$WORK/ud-c.txt"
 has    "and the leaks row is not green"               'Recent leaks none found, but some folders were not read' "$WORK/ud-c.txt"
 has    "and the Python rows are not green"            '! LiteLLM 1\.107\.0 no signs in [0-9]+ Python environments?, but some folders in your home were not read' "$WORK/ud.txt"
+# A rules file section 1 reads, there but unreadable: row 01, where its findings show, is not green.
+rm -rf "$WORK/ur"; cp -R "$WORK/clean" "$WORK/ur"; mkdir -p "$WORK/ur/.codex/rules"
+printf 'prefix_rule(pattern = ["ls"], decision = "allow")\n' > "$WORK/ur/.codex/rules/default.rules"; chmod 000 "$WORK/ur/.codex/rules/default.rules"
+psrun "$WORK/ur" GIRD_CHECK_COMPACT=1 -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/ur-c.txt"; chmod 644 "$WORK/ur/.codex/rules/default.rules"
+has    "an unreadable rules file: the agents row is not green" 'Coding agents +[0-9]+ found, but 1 settings file could not be read' "$WORK/ur-c.txt"
 # Poetry's and Hatch's own folders of environments under LOCALAPPDATA, and pipenv's off Windows, which
 # the home scan does not enter, are read: each holds a bad version here. A site-packages folder that
 # can't be read is not counted as an environment checked: the Python rows, the headline and row 05 say so.
@@ -2744,6 +2767,27 @@ has    "and row 05 says authorized_keys was not fully checked" 'Recent leaks +SS
 rm -rf "$WORK/dz-cxkd"; cp -R "$WORK/dz-cxku" "$WORK/dz-cxkd"; chmod 000 "$WORK/dz-cxkd/.ssh"
 dzrun "$WORK/dz-cxkd" | tr -s ' \n' '  ' > "$WORK/dz-cxkd.txt"; chmod 700 "$WORK/dz-cxkd/.ssh"
 has    "a .ssh folder it can't open is not fully checked either" 'Editor extensions not fully checked: ~/\.ssh/authorized_keys could not be read' "$WORK/dz-cxkd.txt"
+# A pipe at authorized_keys is never read, as a read of one waits for ever, and one over the size every
+# file read is held to (16 MiB) is not read either: each is named not fully checked. The run gets 60 s
+# and is killed and failed after.
+rm -rf "$WORK/dz-cxkp" "$WORK/dz-cxkb"; cp -R "$WORK/dz-cxku" "$WORK/dz-cxkp"; cp -R "$WORK/dz-cxku" "$WORK/dz-cxkb"
+rm -f "$WORK/dz-cxkp/.ssh/authorized_keys"; mkfifo "$WORK/dz-cxkp/.ssh/authorized_keys"
+python3 -c 'import sys; f = open(sys.argv[1], "r+b"); f.truncate(16777217)' "$WORK/dz-cxkb/.ssh/authorized_keys"
+dzrun "$WORK/dz-cxkp" > "$WORK/dz-cxkp-raw.txt" &
+BP=$!; for _i in $(seq 1 600); do kill -0 "$BP" 2>/dev/null || break; sleep 0.1; done
+if kill -0 "$BP" 2>/dev/null; then pkill -9 -P "$BP" 2>/dev/null; kill -9 "$BP" 2>/dev/null; printf 'the check did not finish in 60 s\n' > "$WORK/dz-cxkp-raw.txt"; fi
+wait "$BP" 2>/dev/null
+tr -s ' \n' '  ' < "$WORK/dz-cxkp-raw.txt" > "$WORK/dz-cxkp.txt"
+dzrun "$WORK/dz-cxkb" | tr -s ' \n' '  ' > "$WORK/dz-cxkb.txt"
+has    "a pipe at authorized_keys does not hold up the check" 'Your AI Exposure Check' "$WORK/dz-cxkp.txt"
+has    "and is not fully checked"                       'Editor extensions not fully checked: ~/\.ssh/authorized_keys could not be read' "$WORK/dz-cxkp.txt"
+has    "an authorized_keys over 16 MiB is not fully checked" 'Editor extensions not fully checked: ~/\.ssh/authorized_keys could not be read' "$WORK/dz-cxkb.txt"
+# The extension's startup files are looked for by their paths: with ~/.config closed, whether .smt is
+# there can't be told, so the row is not green.
+rm -rf "$WORK/dz-cxkc"; cp -R "$WORK/dz-cxku" "$WORK/dz-cxkc"; rm -f "$WORK/dz-cxkc/.ssh/authorized_keys"
+mkdir -p "$WORK/dz-cxkc/.config"; : > "$WORK/dz-cxkc/.config/.smt"; chmod 000 "$WORK/dz-cxkc/.config"
+dzrun "$WORK/dz-cxkc" | tr -s ' \n' '  ' > "$WORK/dz-cxkc.txt"; chmod 755 "$WORK/dz-cxkc/.config"
+has    "with a home folder not read, the extensions row says so" '! Editor extensions none of [0-9]+ bad versions or [0-9]+ bad extensions, but some folders in your home were not read' "$WORK/dz-cxkc.txt"
 # GlassWorm's LaunchAgent next to another incident's extension (Nx Console) is a file to check, not
 # GlassWorm's sign: people name their own LaunchAgents that way.
 rm -rf "$WORK/dz-nxgw"; cp -R "$WORK/dz-nx" "$WORK/dz-nxgw"; mkdir -p "$WORK/dz-nxgw/Library/LaunchAgents"; : > "$WORK/dz-nxgw/Library/LaunchAgents/com.user.nodestart.plist"
@@ -3611,7 +3655,7 @@ has    "made-up Python package: the link flags it"    '&ll=0&.*&py=1&' "$WORK/mu
 has    "made-up planted file and its note"            '~/code/made/\.vscode/madeplant\.js a file the Made worm plants' "$WORK/mu.txt"
 has    "a hook that runs it, with the general note"   '~/code/made/\.claude/settings\.json runs a file a worm plants' "$WORK/mu.txt"
 has    "a made-up planted file with its published SHA-256 counts on its own" '~/code/made/hash/\.claude/madeboot\.mjs a file the Made worm plants' "$WORK/mu.txt"
-has    "and the same name with other contents is a file to read" '! ~/code/made/plain/\.claude/madeboot\.mjs Named like a file the Made worm plants, with nothing else of theirs beside it' "$WORK/mu.txt"
+has    "and the same name with other contents is a file to read" '! ~/code/made/plain/\.claude/madeboot\.mjs Named like a file the Made worm plants, but no file that only the malware uses is beside it' "$WORK/mu.txt"
 has    "made-up Python package: its own row"          'Madepkg 9\.9\.9 +signs of the malware found ~/code/venv/lib/site-packages: madepkg 9\.9\.9, madepy_boot\.pth ~/AppData/Local/Temp/\.madepy_1 ' "$WORK/mu.txt"
 has    "made-up Python incident: its startup file is in its row, with its note" 'Madepkg 9\.9\.9 +signs of the malware found .*~/\.config/madepy/boot\.py the Madepkg backdoor, started at login' "$WORK/mu.txt"
 if [ "$(grep -o 'madepy/boot\.py' "$WORK/mu.txt" | grep -c .)" -eq 1 ]; then ok "and it is not listed as npm malware too"; else bad "and it is not listed as npm malware too"; fi
@@ -3733,29 +3777,54 @@ SKIPPING=""
 echo "data platform login files"
 # Login files are listed by name when they hold a secret, never shown. Built from pieces at run time.
 LG=$WORK/lg; _sec=$(rnd 32)
-mkdir -p "$LG"; for _h in has none env sys; do cp -R "$WORK/clean" "$LG/$_h"; done
+mkdir -p "$LG"; for _h in has none env sys oth; do cp -R "$WORK/clean" "$LG/$_h"; done
 mkdir -p "$LG/has/.azure" "$LG/has/.dbt" "$LG/has/.snowflake" "$LG/none/.azure" "$LG/none/.dbt" "$LG/none/.snowflake" \
-  "$LG/env/az" "$LG/env/dbtp" "$LG/env/sf" "$LG/sys/Library/Application Support/snowflake" "$LG/sys/.config/snowflake"
+  "$LG/env/az" "$LG/env/dbtp" "$LG/env/sf"
 printf '[{"client_id": "%s", "tenant": "t", "client_secret": "%s"}]\n' "$(rnd 8)" "$_sec" > "$LG/has/.azure/service_principal_entries.json"
 printf '[DEFAULT]\nhost = https://example.cloud.databricks.com\ntoken = %s\n' "$_sec" > "$LG/has/.databrickscfg"
 printf 'app:\n  outputs:\n    dev:\n      type: postgres\n      password: "%s"\n' "$_sec" > "$LG/has/.dbt/profiles.yml"
 printf '[default]\naccount = "a"\nuser = "u"\npassword = "%s"\n' "$_sec" > "$LG/has/.snowflake/connections.toml"
 printf '[{"client_id": "%s", "tenant": "t", "certificate": "/home/me/sp.pem"}]\n' "$(rnd 8)" > "$LG/none/.azure/service_principal_entries.json"
 printf '[DEFAULT]\nhost = https://example.cloud.databricks.com\nauth_type = databricks-cli\n' > "$LG/none/.databrickscfg"
-printf 'app:\n  outputs:\n    dev:\n      type: postgres\n      password: "{{ env_var(%sDBT_PASSWORD%s) }}"\n' "'" "'" > "$LG/none/.dbt/profiles.yml"
-printf '[default]\naccount = "a"\nauthenticator = "externalbrowser"\n' > "$LG/none/.snowflake/connections.toml"
+printf 'app:\n  outputs:\n    dev:\n      type: postgres\n      password: "{{ env_var(%sDBT_PASSWORD%s) }}"\n      private_key_path: /home/me/rsa_key.p8\n' "'" "'" > "$LG/none/.dbt/profiles.yml"
+printf '[default]\naccount = "a"\nauthenticator = "externalbrowser"\nprivate_key_file = "/home/me/rsa_key.p8"\ntoken_file_path = "/home/me/token"\n' > "$LG/none/.snowflake/connections.toml"
 cp "$LG/has/.azure/service_principal_entries.json" "$LG/env/az/"; cp "$LG/has/.dbt/profiles.yml" "$LG/env/dbtp/"; cp "$LG/has/.snowflake/connections.toml" "$LG/env/sf/"
 # The system's own folder, as gird-check.sh picks it: Application Support on a Mac, ~/.config on Linux.
-cp "$LG/has/.snowflake/connections.toml" "$LG/sys/Library/Application Support/snowflake/config.toml"
-cp "$LG/has/.snowflake/connections.toml" "$LG/sys/.config/snowflake/config.toml"
-for _h in has none sys; do psrun "$LG/$_h" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$LG/$_h.txt"; done
+# One home holds the file there and one in the other system's folder, which is not read.
+case "$(uname -s)" in
+  Darwin) _sfsys="Library/Application Support/snowflake"; _sfoth=".config/snowflake" ;;
+  *) _sfsys=".config/snowflake"; _sfoth="Library/Application Support/snowflake" ;;
+esac
+mkdir -p "$LG/sys/$_sfsys" "$LG/oth/$_sfoth"
+cp "$LG/has/.snowflake/connections.toml" "$LG/sys/$_sfsys/config.toml"
+cp "$LG/has/.snowflake/connections.toml" "$LG/oth/$_sfoth/config.toml"
+for _h in has none sys oth; do psrun "$LG/$_h" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$LG/$_h.txt"; done
 psrun "$LG/env" AZURE_CONFIG_DIR="$LG/env/az" DBT_PROFILES_DIR="$LG/env/dbtp" SNOWFLAKE_HOME="$LG/env/sf" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$LG/env.txt"
 _want='Azure service principal secrets.*Databricks logins.*dbt warehouse passwords.*Snowflake logins'
 has    "lists the Azure, Databricks, dbt and Snowflake login files that hold a secret" "$_want" "$LG/has.txt"
-hasnot "but not one with only a certificate, a host, an env_var or a browser login" 'Azure service principal|Databricks logins|dbt warehouse|Snowflake logins' "$LG/none.txt"
+hasnot "but not one with only a certificate, a host, a key file's path, an env_var or a browser login" 'Azure service principal|Databricks logins|dbt warehouse|Snowflake logins' "$LG/none.txt"
 has    "and follows AZURE_CONFIG_DIR, DBT_PROFILES_DIR and SNOWFLAKE_HOME" 'Azure service principal secrets.*dbt warehouse passwords.*Snowflake logins' "$LG/env.txt"
 has    "and finds Snowflake's file in the system's own folder" 'Snowflake logins' "$LG/sys.txt"
-if grep -aqF "$_sec" "$LG/has.txt" "$LG/env.txt"; then bad "and never prints what a login file holds"; else ok "and never prints what a login file holds"; fi
+hasnot "but not in another system's folder"           'Snowflake logins' "$LG/oth.txt"
+# The other secrets each tool's docs name, one home for each run: Databricks' azure_client_secret
+# (an Entra service principal) and password, dbt's inline private_key (a key pair with no passphrase),
+# and Snowflake's OAuth token, oauth_client_secret, private_key_raw and private_key_file_pwd.
+_pk="-----BEGIN ""PRIVATE KEY-----\\n$(rnd 64)\\n-----END ""PRIVATE KEY-----"
+for _h in s1 s2 s3 s4; do mkdir -p "$LG/$_h/.snowflake" "$LG/$_h/AppData/Roaming" "$LG/$_h/AppData/Local/Temp"; done
+mkdir -p "$LG/s1/.dbt"
+printf '[DEFAULT]\nhost = https://example.azuredatabricks.net\nazure_client_id = %s\nazure_client_secret = %s\n' "$(rnd 8)" "$_sec" > "$LG/s1/.databrickscfg"
+printf 'app:\n  outputs:\n    dev:\n      type: snowflake\n      private_key: "%s"\n' "$_pk" > "$LG/s1/.dbt/profiles.yml"
+printf '[default]\naccount = "a"\nauthenticator = "oauth"\ntoken = "%s"\n' "$_sec" > "$LG/s1/.snowflake/connections.toml"
+printf '[DEFAULT]\nhost = https://example.cloud.databricks.com\nusername = me\npassword = %s\n' "$_sec" > "$LG/s2/.databrickscfg"
+printf '[default]\naccount = "a"\noauth_client_secret = "%s"\n' "$_sec" > "$LG/s2/.snowflake/connections.toml"
+printf '[default]\naccount = "a"\nprivate_key_raw = "%s"\n' "$_pk" > "$LG/s3/.snowflake/connections.toml"
+printf '[default]\naccount = "a"\nprivate_key_file = "/home/me/rsa_key.p8"\nprivate_key_file_pwd = "%s"\n' "$_sec" > "$LG/s4/.snowflake/connections.toml"
+for _h in s1 s2 s3 s4; do psrun "$LG/$_h" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$LG/$_h.txt"; done
+has    "lists Databricks' azure_client_secret, dbt's inline private_key and Snowflake's OAuth token" 'Databricks logins.*dbt warehouse passwords.*Snowflake logins' "$LG/s1.txt"
+has    "lists Databricks' password and Snowflake's OAuth client secret" 'Databricks logins.*Snowflake logins' "$LG/s2.txt"
+has    "lists Snowflake's inline private key"            'Snowflake logins' "$LG/s3.txt"
+has    "lists the password of Snowflake's key file"      'Snowflake logins' "$LG/s4.txt"
+if grep -aqF "$_sec" "$LG/has.txt" "$LG/env.txt" "$LG/s1.txt" "$LG/s2.txt" "$LG/s4.txt"; then bad "and never prints what a login file holds"; else ok "and never prints what a login file holds"; fi
 # A dbt password in single quotes is one too, and Snowflake's Windows folder is not read off Windows.
 for _h in sq win; do cp -R "$WORK/clean" "$LG/$_h"; done
 mkdir -p "$LG/sq/.dbt" "$LG/win/AppData/Local/snowflake"
@@ -3764,6 +3833,8 @@ cp "$LG/has/.snowflake/connections.toml" "$LG/win/AppData/Local/snowflake/connec
 for _h in sq win; do psrun "$LG/$_h" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$LG/$_h.txt"; done
 has    "a dbt password in single quotes is listed"        'dbt warehouse passwords' "$LG/sq.txt"
 hasnot "Snowflake's Windows folder is not read off Windows" 'Snowflake logins' "$LG/win.txt"
+psrun "$LG/win" OS=Windows_NT -- -Offline 2>&1 | tr -s ' \n' '  ' > "$LG/winon.txt"
+has    "Windows: Snowflake's file is read from LOCALAPPDATA" 'Snowflake logins' "$LG/winon.txt"
 
 echo "shared access signatures"
 # A shared access signature is not a key type: GitHub hands out short-lived signed links to its own
@@ -4375,6 +4446,8 @@ winps -- -Offline 2>&1 | tr -s ' \n' '  ' > "$WORK/win-cx.txt"
 rm -f "${WP:?}/.config/smt.cmd" "${WP:?}/.config/smtk" "${WP:?}/.config/.smt" "$WSU/sysmon.cmd" "${WP:?}/Library/LaunchAgents/com.apple.sysmond.plist"
 has    "Windows: sysmon.cmd alone is a file to check" 'Startup/sysmon\.cmd has the name of a file that starts the trojanized Claude Code extension.s tunnel at every login' "$WORK/win-cx0.txt"
 hasnot "Windows: and not a sign of the malware"        'Editor extensions signs of the malware found' "$WORK/win-cx0.txt"
+# Its own fix, to remove what it leaves, comes before any rotate even here: if you did not set it up.
+has    "Windows: sysmon.cmd alone: the fix removes what the extension leaves before the rotate" 'Open the startup file listed in section 5 and check what it starts at login\. If you did not set it up yourself, first remove what the trojanized Claude Code extension leaves: .* if you did not turn it on yourself\. After that, treat this machine as compromised: delete it and rotate every key this machine could reach\.' "$WORK/win-cx0.txt"
 has    "Windows: the trojanized extension's smt.cmd is its sign" 'Editor extensions signs of the malware found .*~/\.config/smt\.cmd a script the trojanized Claude Code extension writes to keep its tunnel running' "$WORK/win-cx.txt"
 has    "Windows: and so is its smtk"                  '~/\.config/smtk a file the trojanized Claude Code extension writes beside smt\.cmd' "$WORK/win-cx.txt"
 hasnot "Windows: its macOS and Linux tunnel script is not looked for" '~/\.config/\.smt the trojanized' "$WORK/win-cx.txt"
@@ -4588,6 +4661,19 @@ for _m in quiet loud; do
   else bad "fleet: an account run stops its ripgrep at three quarters of its time while the rest still runs, $_m" "exit $_rc, ended at $((_rgend - _t0))s of $((_t2 - _t0))s, $(grep -E '^(sessions_partial|engine)=' "$FW/rg$_m.out" | tr '\n' ' ')"; fi
   kill "$(cat "$FW/rg.pid" 2>/dev/null)" 2>/dev/null
 done
+# A session check that does not end when told, as one blocked in a read would (the .NET engine held
+# with GIRD_CHECK_TEST_SESSIONS_DEAF, tests only): the account run waits for it only until its time
+# less a margin, so its lines, with the key it found and the sessions partly checked, are printed
+# inside the 40 seconds it is given, which gird-fleet.ps1 counts from before this run starts. 120
+# seconds is a safety ceiling.
+fw_home deaf; mkdir -p "$FW/deaf/.claude/projects/p" "$FW/deaf/code/app"; printf '{}\n' > "$FW/deaf/.claude/projects/p/a.jsonl"
+printf 'AWS_ACCESS_KEY_ID=%s\n' "AK""IA$(upper 16)" > "$FW/deaf/code/app/.env"; : > "$FW/deafhold"; _t0=$(date +%s)
+psrun "$FW/deaf" GIRD_CHECK_SESSIONS_ENGINE=net GIRD_CHECK_SESSIONS_HOLD="$FW/deafhold" GIRD_CHECK_TEST_SESSIONS_DEAF=1 -- -AccountRun --account-seconds=40 > "$FW/deaf.out" 2> /dev/null &
+_bp=$!; for _i in $(seq 1 600); do kill -0 "$_bp" 2>/dev/null || break; sleep 0.2; done; _t1=$(date +%s)
+kill -0 "$_bp" 2>/dev/null && kill -9 "$_bp" 2>/dev/null; wait "$_bp" 2>/dev/null; rm -f "$FW/deafhold"
+if [ $((_t1 - _t0)) -lt 40 ] && grep -q '^key_files=1$' "$FW/deaf.out" && grep -q '^sessions_partial=1$' "$FW/deaf.out" && grep -q '^end=1$' "$FW/deaf.out"
+then ok "fleet: an account run whose session check does not stop still prints inside its time" "$((_t1 - _t0))s of 40"
+else bad "fleet: an account run whose session check does not stop still prints inside its time" "$((_t1 - _t0))s of 40, $(grep -E '^(key_files|sessions_partial|end)=' "$FW/deaf.out" | tr '\n' ' ')"; fi
 # A ripgrep that closes its output and never ends does not hold up a run by hand, even with
 # -AllSessions: it gets a while (GIRD_CHECK_TEST_GRACE_MS, tests only) and is stopped, and the
 # sessions are partly checked. 120 seconds is a safety ceiling.
@@ -4661,6 +4747,35 @@ fw_home unread; mkdir -p "$FW/unread/code/locked"; printf 'export OPENAI_API_KEY
 fw_run unread "$FW/unread"
 chmod 755 "$FW/unread/code/locked"; chmod 644 "$FW/unread/.zshrc"
 if grep -qE "^$FA\\.files_not_checked=([2-9]|[1-9][0-9]+)\$" "$FW/unread.flat" && grep -q "^$FA\\.outcome=not_checked\$" "$FW/unread.flat"; then ok "fleet: a file or folder the account can't read is not checked, never clear"; else bad "fleet: a file or folder the account can't read is not checked, never clear" "$(grep "^$FA" "$FW/unread.flat" | tr '\n' ' ')"; fi
+NR=$FW/nr; mkdir -p "$NR"
+nr_of() { psrun "$NR/$1" -- -AccountRun 2> /dev/null | sed -n 's/^not_read=//p'; }
+# Each file not read in full counts once in an account run's not_read, however many checks read it,
+# and gird-check.sh and gird-check.ps1 count the same: a Codex rule its reader gives up on (single
+# quotes), a user hook file, ~/.ssh/authorized_keys and a workflow that can't be read, and all of them
+# with a project's settings.local.json that can't be read, which three checks read.
+for _n in cut hook ak wf all; do rm -rf "${NR:?}/$_n"; mkdir -p "$NR/$_n" "$NR/$_n/AppData/Roaming" "$NR/$_n/AppData/Local/Temp"; done
+for _n in cut all; do mkdir -p "$NR/$_n/.codex/rules"; printf "prefix_rule(pattern = ['ssh'], decision = 'allow')\n" > "$NR/$_n/.codex/rules/default.rules"; done
+for _n in hook all; do mkdir -p "$NR/$_n/.codex"; printf '{"hooks":{"SessionStart":[{"hooks":[{"type":"command","command":"node ~/.codex/package/index.js"}]}]}}\n' > "$NR/$_n/.codex/hooks.json"; chmod 000 "$NR/$_n/.codex/hooks.json"; done
+for _n in ak all; do mkdir -p "$NR/$_n/.ssh"; printf 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAI%s me@laptop\n' "$(rnd 43)" > "$NR/$_n/.ssh/authorized_keys"; chmod 000 "$NR/$_n/.ssh/authorized_keys"; done
+for _n in wf all; do mkdir -p "$NR/$_n/code/app/.github/workflows"; printf 'on: push\njobs:\n  a:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n' > "$NR/$_n/code/app/.github/workflows/ci.yml"; chmod 000 "$NR/$_n/code/app/.github/workflows/ci.yml"; done
+mkdir -p "$NR/all/code/p/.claude"; printf '{"permissions":{"allow":["Bash(ls)"]}}\n' > "$NR/all/code/p/.claude/settings.local.json"; chmod 000 "$NR/all/code/p/.claude/settings.local.json"
+nr_is() { # name want home
+  _g=$(nr_of "$3"); if [ "$_g" = "$2" ]; then ok "$1"; else bad "$1" "not_read=$_g, want $2"; fi
+}
+nr_is "fleet: not_read counts a rules file read only in part" 1 cut
+nr_is "fleet: not_read counts a user hook file it can't read" 1 hook
+nr_is "fleet: not_read counts an authorized_keys it can't read" 1 ak
+nr_is "fleet: not_read counts a workflow it can't read" 1 wf
+nr_is "fleet: not_read counts each file once, however many checks read it" 5 all
+# And every value of the two account runs on that home, not only their keys, but the engine (perl or
+# dotnet). gird-check.sh's account run reads BSD stat, so this runs on a Mac.
+if [ "$(uname -s)" = Darwin ]; then
+  env -i PATH=/usr/bin:/bin:/usr/sbin:/sbin HOME="$NR/all" /bin/bash "$BASH_SCRIPT" --account-run 2> /dev/null < /dev/null | grep -v '^engine=' > "$NR/all-sh.txt"
+  psrun "$NR/all" -- -AccountRun 2> /dev/null | grep -v '^engine=' > "$NR/all-ps.txt"
+  if grep -q '^not_read=5$' "$NR/all-sh.txt" && cmp -s "$NR/all-sh.txt" "$NR/all-ps.txt"; then ok "fleet: -AccountRun prints the values of --account-run on a home with files it can't read"
+  else bad "fleet: -AccountRun prints the values of --account-run on a home with files it can't read" "$(diff "$NR/all-sh.txt" "$NR/all-ps.txt" | head -n 6 | tr '\n' ' ')"; fi
+else skip "fleet: -AccountRun prints the values of --account-run on a home with files it can't read" "gird-check.sh --account-run reads BSD stat: macOS only"; fi
+chmod -R u+rw "$NR"
 fw_home cut; mkdir -p "$FW/cut/code/evil/.codex"
 python3 -c "import sys; open(sys.argv[1], 'w').write('args = [' + '\"a\",' * 17000 + '\"\"\"x\"\"\"]\napproval_policy = \"never\"\nsandbox_mode = \"danger-full-access\"\n')" "$FW/cut/code/evil/.codex/config.toml"
 fw_run cut "$FW/cut" -- --json

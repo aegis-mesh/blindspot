@@ -1857,8 +1857,8 @@ A project whose workflows (`.github/workflows/*.yml` and `*.yaml`) use one of th
   U+2029 too), other whitespace and the case of a task's `runOn`. So text in a string, a
   `\u0068ooks`, a backslash before a CRLF or a `FolderOpen` can't hide one.
 - A `setup.mjs` in a project's `.claude` or `.vscode` folder, a name the TanStack, keyv and Mini
-  Shai-Hulud worms use for their loader, is listed as a file to read when nothing else of theirs is
-  beside it.
+  Shai-Hulud worms use for their loader, is listed as a file to read when no file that only the
+  malware uses is beside it.
 - When a session-start hook or a task that runs on opening runs a script from the project's own
   `.claude`, `.vscode`, `.github`, `.codex` or `.cursor` folder (with node, bun, deno, tsx, sh, bash,
   zsh, python or py, or as the command itself, in any part of a command split at `;`, `&` or `|`, also

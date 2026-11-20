@@ -1758,7 +1758,7 @@ SESS_PRE=$KEY_STARTS
 # script stops them at the next piece.
 SESS_PERL='
 use strict; use warnings; use File::Find; use IO::Select;
-my @passes = map { [map { qr/$_/ } grep { length } split /\n/] } split /\n\n/, $ENV{SESS_KEYS}; my $pre = qr/$ENV{SESS_PRE}/; my $owner = getppid(); my $parent = $$; my @kids;
+my @passes = map { [map { qr/$_/m } grep { length } split /\n/] } split /\n\n/, $ENV{SESS_KEYS}; my $pre = qr/$ENV{SESS_PRE}/m; my $owner = getppid(); my $parent = $$; my @kids;
 $SIG{TERM} = $SIG{HUP} = $SIG{INT} = $SIG{PIPE} = sub { kill "TERM", @kids; exit 0 };
 my @f = grep { !-d $_ && -f $_ } @ARGV; my $unread = 0;
 {
@@ -1787,7 +1787,9 @@ for my $w (0 .. $n - 1) {
       binmode $h; local $/ = \1048576; my $buf = "";
       # One regex a pattern (SESS_KEYS), each run from where the last match ended: the leftmost
       # match wins, and of two at one place the pattern listed first, as in one alternation. Each
-      # pass (an empty line in SESS_KEYS) is matched on its own.
+      # pass (an empty line in SESS_KEYS) is matched on its own. Each is compiled with /m, so ^ and $
+      # match at the ends of every line, as grep and ripgrep read them: a key at the start of a line
+      # is found after one whose boundary took the line break before it.
       my $scan = sub { my $t = shift; return unless $t =~ $pre; $_->($t) for map { my $re = $_; sub {
         my $t = shift; my @re = @$re;
         my $at = 0; my @nx;
@@ -3715,9 +3717,12 @@ login "$H/.railway/config.json" "Railway login" railway
 # profiles.yml, found as dbt finds it (docs.getdbt.com; a value taken from env_var is not in the file),
 # and Snowflake's connections.toml and config.toml, in the folder Snowflake CLI picks
 # (docs.snowflake.com): SNOWFLAKE_HOME when it is set and there, else ~/.snowflake when it is there,
-# else the system's own folder.
-login "$H/.databrickscfg" "Databricks logins" databricks '^[[:space:]]*(token|client_secret)[[:space:]]*='
-login "${_dbd:-$H/.dbt}/profiles.yml" "dbt warehouse passwords" dbt '^[[:space:]]*(password|token|private_key_passphrase|client_secret|refresh_token)[[:space:]]*:[[:space:]]*["'\'']?[A-Za-z0-9_+/=.~-]'
+# else the system's own folder. A file is listed when a line sets one of the secrets its tool's docs
+# name: Databricks' token, client secrets (azure_client_secret for an Entra service principal) and
+# password; dbt's passwords, tokens and an inline private_key; Snowflake's password, OAuth token and
+# client secret, and an inline private key or the password of a key file.
+login "$H/.databrickscfg" "Databricks logins" databricks '^[[:space:]]*(token|client_secret|azure_client_secret|password)[[:space:]]*='
+login "${_dbd:-$H/.dbt}/profiles.yml" "dbt warehouse passwords" dbt '^[[:space:]]*(password|token|private_key|private_key_passphrase|client_secret|refresh_token)[[:space:]]*:[[:space:]]*["'\'']?[A-Za-z0-9_+/=.~-]'
 _sf=""
 if [ -n "$_sfh" ]; then [ -d "$_sfh" ] && _sf=$_sfh
 elif [ -d "$H/.snowflake" ]; then _sf=$H/.snowflake; fi
@@ -3725,7 +3730,7 @@ if [ -z "$_sf" ]; then
   case "$_os" in win) _sf=$WLAPP/snowflake ;; mac) _sf="$H/Library/Application Support/snowflake" ;; *) _sf=${XDG_CONFIG_HOME:-$H/.config}/snowflake ;; esac
 fi
 for _sfc in connections.toml config.toml; do
-  case " $LOGIN_IDS " in *" snowflake "*) ;; *) login "$_sf/$_sfc" "Snowflake logins" snowflake '^[[:space:]]*(password|private_key_passphrase)[[:space:]]*=' ;; esac
+  case " $LOGIN_IDS " in *" snowflake "*) ;; *) login "$_sf/$_sfc" "Snowflake logins" snowflake '^[[:space:]]*(password|token|oauth_client_secret|private_key_raw|private_key_passphrase|private_key_file_pwd)[[:space:]]*=' ;; esac
 done
 if [ "$WIN" -eq 1 ]; then # where these tools keep the same logins on Windows
   case " $LOGIN_IDS " in *" gcloud "*) ;; *) login "$WAPP/gcloud/application_default_credentials.json" "Google Cloud login" gcloud ;; esac
@@ -8686,7 +8691,8 @@ NPM_INCS=" $(printf '%s\n' "$BAD_NPM" | awk '{ print $3 }' | sort -u | tr '\n' '
 # with that incident's extensions (EXT_KEY). A line counts when the key's type and then the key itself
 # are two of its fields, whatever options come before them or comment after: a comment alone never
 # counts. A file, or a .ssh folder, that can't be read leaves the check not done in full
-# (SSHK_UNREAD), never clean.
+# (SSHK_UNREAD), never clean: so does anything but a regular file (a pipe would hold the read for
+# ever, a link to a device never end it), and a file over READ_MAX. /dev/null holds nothing.
 EXT_KEY=""; EXT_KEY_TAGS=""; SSHK_UNREAD=0; _akf="$H/.ssh/authorized_keys"
 if [ ! -e "$_akf" ]; then
   # Not there, or there and out of reach: a .ssh folder that can't be listed, or that lists the file
@@ -8697,6 +8703,8 @@ if [ ! -e "$_akf" ]; then
   fi
 else
   if [ -d "$_akf" ] || [ ! -r "$_akf" ]; then SSHK_UNREAD=1
+  elif [ "$_akf" -ef /dev/null ]; then :
+  elif [ ! -f "$_akf" ] || too_big "$_akf"; then SSHK_UNREAD=1
   elif _akh=$(SSHK=$SSH_PLANTED awk '
       BEGIN { n = split(ENVIRON["SSHK"], L, "\n"); for (i = 1; i <= n; i++) { split(L[i], f, "|"); inc[i] = f[1]; t[i] = f[2]; k[i] = f[3]; nt[i] = f[4] } }
       { sub(/\r$/, ""); for (j = 2; j <= NF; j++) for (i = 1; i <= n; i++) if ($j == k[i] && $(j - 1) == t[i] && !s[i]++) print inc[i] "\t" nt[i] }' "$_akf" 2>/dev/null); then
@@ -9184,7 +9192,18 @@ if [ "$MAL_LOCKONLY" -eq 1 ]; then
   if [ "$N_LOCKPROJ" -eq 1 ]; then _lp="the project"; _ll="its lockfile"; else _lp="the projects"; _ll="their lockfiles"; fi
   todo 5 "If you ran an install in $_lp section 5 lists, treat this machine as compromised: from another computer, rotate every key this machine could reach, then clear npm's cache with npm cache clean --force. If not, update $_ll to a version without the malware."
 fi
-[ -n "$EXT_CHECK" ] && todo 5 "Open the startup file listed in section 5 and check what it starts at login. If you did not set it up yourself, treat this machine as compromised: delete it and rotate every key this machine could reach."
+# A startup file named like one of an incident whose own fix starts with "First" (what it leaves must
+# go before any key is rotated, as claudeext's sysmon.cmd on Windows): that fix comes ahead of the rotate.
+if [ -n "$EXT_CHECK" ]; then
+  _xf=""
+  for _t in $EXT_CHECK_TAGS; do
+    _a=$(incident_advice "$_t"); case "$_a" in First\ *) ;; *) continue ;; esac
+    case "$_xf" in *"$_a"*|*"f${_a#F}"*) continue ;; esac
+    if [ -z "$_xf" ]; then _xf="f${_a#F} "; else _xf="$_xf$_a "; fi
+  done
+  if [ -n "$_xf" ]; then todo 5 "Open the startup file listed in section 5 and check what it starts at login. If you did not set it up yourself, ${_xf}After that, treat this machine as compromised: delete it and rotate every key this machine could reach."
+  else todo 5 "Open the startup file listed in section 5 and check what it starts at login. If you did not set it up yourself, treat this machine as compromised: delete it and rotate every key this machine could reach."; fi
+fi
 [ "$LITELLM_HIT" -eq 0 ] && [ -n "$LITE_PYC" ] && todo 5 "A leftover cook.pyc can come from the LiteLLM 1.107.0 malware. If litellm 1.107.0 was ever installed there, treat this machine as compromised, follow LiteLLM's advisory and rotate every key it could reach."
 advice_todos lock
 advice_todos update
@@ -9289,7 +9308,10 @@ finding_fields
 if [ "$ACCTRUN" -eq 1 ]; then
   # Each error find printed is a folder not read, and a find that refused the scan prints one too.
   _fe=$(grep -c . "$SCAN_ERR" 2>/dev/null); case "$_fe" in ''|*[!0-9]*) _fe=0 ;; esac
-  _nr=$(sort -u "$FLEET_NR" 2>/dev/null | grep -c .); _nr=$((_nr + NPM_UNREAD + N_LOCK_UNREAD + EXT_UNREAD + SSHK_UNREAD + N_NL_DIRS + N_NM_UNREAD + _fe))
+  # Section 2's files that are there but were not read in full count too (SEC2_UNREAD: a rules file
+  # its reader gave up on, a user hook file such as ~/.codex/hooks.json), each file once with FLEET_NR,
+  # as gird-check.ps1 counts each once.
+  _nr=$({ cat "$FLEET_NR" 2>/dev/null; printf '%s\n' "$SEC2_UNREAD"; } | sort -u | grep -c .); _nr=$((_nr + NPM_UNREAD + N_LOCK_UNREAD + EXT_UNREAD + SSHK_UNREAD + N_NL_DIRS + N_NM_UNREAD + _fe))
   # Root starts the run with a clean environment, so a variable a shell profile sets to move an agent's
   # or a tool's folders (CLAUDE_CONFIG_DIR, NVM_DIR and the like, data/folder-vars.tsv) is not
   # followed: the account is partly checked then. A variable set to a folder the run reads anyway
@@ -9857,7 +9879,7 @@ fi
 [ "$SCAN_FAILED" -eq 1 ] && wrap "The home folder was not scanned ($SCAN_WHY): project .env files, settings, MCP configs and lockfiles were not read. Sections 2 to 5 cover only the known agent paths."
 HEAD_SHORT=$CAP; CAP=""
 wrap "$STATS" 4 "  ${SEV}▌${RST} " "  ${SEV}▌${RST} " "$DIM" 4 "  ${YEL}▌${RST} " "  ${YEL}▌${RST} " "$YEL"
-# Folders the home scan could not enter, so sections 2 to 5 did not read the files in them.
+# Folders the home scan could not enter, so sections 1 to 5 did not read the files in them.
 dir_list() { # paths, one a line: the first three as short() shows them, then how many more
   _dl=""; _dn=0
   while IFS= read -r _d; do
@@ -9870,16 +9892,16 @@ EOF
   printf '%s' "$_dl"
 }
 if [ "$N_UNREAD_DIRS" -gt 0 ]; then
-  if [ "$N_UNREAD_DIRS" -eq 1 ]; then _it="1 folder in your home could not be read, so sections 2 to 5 did not check the files in it"
-  else _it="$N_UNREAD_DIRS folders in your home could not be read, so sections 2 to 5 did not check the files in them"; fi
+  if [ "$N_UNREAD_DIRS" -eq 1 ]; then _it="1 folder in your home could not be read, so sections 1 to 5 did not check the files in it"
+  else _it="$N_UNREAD_DIRS folders in your home could not be read, so sections 1 to 5 did not check the files in them"; fi
   wrap "$_it: $(dir_list "$UNREAD_DIRS")." 4 "  ${YEL}▌${RST} " "  ${YEL}▌${RST} " "$YEL"
 fi
 if [ "$SCAN_LOST" -eq 1 ]; then
-  wrap "No temp folder could be written to, so the home scan could not tell which folders it could not read, and sections 2 to 5 may have missed files in them." 4 "  ${YEL}▌${RST} " "  ${YEL}▌${RST} " "$YEL"
+  wrap "No temp folder could be written to, so the home scan could not tell which folders it could not read, and sections 1 to 5 may have missed files in them." 4 "  ${YEL}▌${RST} " "  ${YEL}▌${RST} " "$YEL"
 fi
 if [ "$N_NL_DIRS" -gt 0 ]; then
-  if [ "$N_NL_DIRS" -eq 1 ]; then _it="1 folder has a line break in its name, so sections 2 to 5 did not check the files in it"
-  else _it="$N_NL_DIRS folders have a line break in their name, so sections 2 to 5 did not check the files in them"; fi
+  if [ "$N_NL_DIRS" -eq 1 ]; then _it="1 folder has a line break in its name, so sections 1 to 5 did not check the files in it"
+  else _it="$N_NL_DIRS folders have a line break in their name, so sections 1 to 5 did not check the files in them"; fi
   wrap "$_it: $(dir_list "$NL_DIRS"), the line break shown as ?." 4 "  ${YEL}▌${RST} " "  ${YEL}▌${RST} " "$YEL"
 fi
 if [ -n "$OW_CODES" ]; then blank; emit "   ${B}OWASP Agentic Top 10:${RST} $OW_CODES"; fi
@@ -10021,7 +10043,7 @@ if [ "$N_LOOK" -gt 0 ]; then
   while IFS= read -r f; do
     [ -n "$f" ] || continue
     emit "     ${YEL}!${RST}  $(short "$f")"
-    wrap "Named like $(planted_note "$f"), with nothing else of theirs beside it. If you didn't put it there, read it before an agent or editor opens this folder." 8 "        " "        " "$DIM"
+    wrap "Named like $(planted_note "$f"), but no file that only the malware uses is beside it. If you didn't put it there, read it before an agent or editor opens this folder." 8 "        " "        " "$DIM"
   done <<EOF
 $WORM_LOOK
 EOF
@@ -10434,7 +10456,11 @@ elif [ "$EXT_UNREAD" -gt 0 ]; then
 elif [ "$SSHK_UNREAD" -eq 1 ]; then
   pair "${YEL}!${RST}" "Editor extensions" 16 "${YEL}not fully checked: ~/.ssh/authorized_keys could not be read${RST}"
 else
-  pair "${GRN}✓${RST}" "Editor extensions" 16 "none of $(printf '%s\n' "$BAD_EXT" | awk '$2 != "*"' | grep -c .) bad versions or $(printf '%s\n' "$BAD_EXT" | awk '$2 == "*"' | grep -c .) bad extensions"
+  # A startup file of an extension incident (~/.config/.smt) is looked for by its path: under a folder
+  # in the home that could not be read, whether it is there can't be told, as the Python rows say.
+  _xnone="none of $(printf '%s\n' "$BAD_EXT" | awk '$2 != "*"' | grep -c .) bad versions or $(printf '%s\n' "$BAD_EXT" | awk '$2 == "*"' | grep -c .) bad extensions"
+  if [ "$HOME_PARTIAL" -eq 1 ]; then pair "${YEL}!${RST}" "Editor extensions" 16 "$_xnone, but some folders in your home were not read"
+  else pair "${GRN}✓${RST}" "Editor extensions" 16 "$_xnone"; fi
   wrap "checked the extension folders of VS Code, Cursor, Windsurf, Devin Desktop, VSCodium, Kiro, Antigravity and Positron, and ~/.ssh/authorized_keys for an SSH key such malware adds" 26 "                          " "                          " "$DIM"
 fi
 # With findings above, a folder that could not be read still has to be said.
@@ -10593,9 +10619,13 @@ for _t in $NPM_TAGS; do
   [ "$(incident_level "$_t")" = update ] || continue
   _s=$(incident_summary "$_t"); if [ -n "$_s" ]; then UPD_SUM=$_s; break; fi
 done
+# A settings or rules file section 1 reads for its findings that is there but was not read, or a rules
+# file not read in full: section 2 names it, and row 01 does not read clean over it.
+N_RULE_UNREAD=$(count_lines "$({ printf '%s\n%s\n' "$AA_TRIED" "$RC_TRIED" | unread_files big; printf '%s\n' "$RC_CUTS"; } | awk 'length && !s[$0]++')")
 if [ "$N_OLD" -gt 0 ]; then G1="${YEL}!${RST}"; D1="$N_AG found, $(plural "$N_OLD" "security fix" "security fixes") to install"
 elif [ "$N_YOLO" -gt 0 ]; then G1="${YEL}!${RST}"; D1="$N_AG found, $N_YOLO_AG set to run commands without asking"
 elif [ "$N_REMOTE" -gt 0 ]; then G1="${YEL}!${RST}"; D1="$N_AG found, rules let $(plural "$N_REMOTE_AG" agent agents) run commands on other machines"
+elif [ "$N_RULE_UNREAD" -gt 0 ]; then G1="${YEL}!${RST}"; D1="$N_AG found, but $(plural "$N_RULE_UNREAD" "settings file" "settings files") could not be read"
 elif [ "$N_AG" -eq 0 ]; then G1="${DIM}·${RST}"; D1="none found"
 elif [ "$N_IDLE" -gt 0 ]; then G1="${YEL}○${RST}"; D1="$N_AG found, $N_IDLE idle: $(first_names "$IDLE_NAMES" 2)"
 else G1="${GRN}✓${RST}"; D1="$N_AG found, all used in the last 30 days"; fi

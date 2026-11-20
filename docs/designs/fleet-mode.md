@@ -928,10 +928,12 @@ The script then:
    The check stops the tools it started itself. Its only one is ripgrep, for the session check.
    The check stops it at three quarters of its time, or when its own run ends normally, then waits
    2 seconds for it to exit. A ripgrep still running after that, or a session check that does not
-   end by the end of the run's time, leaves the sessions partly checked. When the script stops the
-   check at its time limit, the check's own clean-up does not run, so ripgrep is not stopped by the
-   check: it ends when its search ends or when the output it writes to has no reader left, and the
-   process list below reports it if it is still running.
+   end by the run's time less a margin (10 seconds, or a tenth of the time when that is more), leaves
+   the sessions partly checked: the check stops waiting for it then and prints what it found, so its
+   lines reach the script before the limit, which the script counts from before the check starts.
+   When the script stops the check at its time limit, the check's own clean-up does not run, so
+   ripgrep is not stopped by the check: it ends when its search ends or when the output it writes to
+   has no reader left, and the process list below reports it if it is still running.
    A tool can still be running for a moment after the check is stopped. It is reported, not
    force-closed: the script reads the system's process list once, and a process that names the
    check as its parent and started while the check ran, or whose start time can't be read, makes
