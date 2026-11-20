@@ -14,8 +14,9 @@
 #   hidden    in *.ps1, an added byte that is not printable ASCII, space or tab; in any other file,
 #             a control character (CR included), an invisible or direction-changing character, or
 #             bytes that are not UTF-8; a changed path with a byte that is not printable ASCII; a
-#             binary file other than a png, jpg, gif or webp image under docs/; a symbolic link or a
-#             submodule
+#             binary file, unless it is a png, jpg, gif or webp image under docs/ whose first bytes
+#             are that kind of image; a file named as an image that is not one; a symbolic link or
+#             a submodule
 #   mode      a file whose mode changed, such as one made executable
 #   run       in code, an added line that runs text as code: eval and its kin; a shell, interpreter
 #             or trap given text built from a variable (sh -c "$x", su -c "$x", PowerShell
@@ -29,13 +30,15 @@
 #             or a here-string such a line runs. In *.ps1, & on a variable is flagged unless the
 #             file assigns that variable a { script block }; & on an expression, a string with a
 #             variable in it or $env: is always flagged, and so are assigning Get-Command,
-#             [Diagnostics.Process]::Start and Import-Module given a variable.
+#             [Diagnostics.Process]::Start and Import-Module given a variable. Running or sourcing
+#             a file named as data or an image (sh docs/x.png, . notes.txt) is flagged too.
 #   network   in code, an added line that names a network tool where a command starts (after
 #             sudo, timeout, env and the like too, and with its folder or .exe), or a network API
 #             (NET_SH and NET_PS below), comments included; and an http(s) URL in a line
 #             that is not only a # comment, in any code but tests/ and the blocks tools/gen.sh
 #             writes from data/: a URL in a test is fixture data, and a test that calls out is
-#             caught by the tool it calls with
+#             caught by the tool it calls with. In *.md, a network tool in a fenced code block,
+#             since people run a doc's commands.
 #   shrink    a removed line in data/*.tsv, other than a # comment or a blank line
 #   protected a change under .github/, to a .gitattributes or .gitmodules file, to this guard, its
 #             decision script or its tests, or, at any depth, to what an AI coding agent, editor or
@@ -125,6 +128,8 @@ PSRUN="${B}(pwsh|powershell)$X$E.*[[:space:]]-c(o(m(m(a(n(d)?)?)?)?)?)?[[:space:
 PSRUN="$PSRUN|${B}(pwsh|powershell)$X$E.*[[:space:]]-f(i(l(e)?)?)?[[:space:]]+-([[:space:]]|$)"
 PSRUN="$PSRUN|${B}(pwsh|powershell)$X$E.*[[:space:]]-(ec|e(n(c(o(d(e(d(c(o(m(m(a(n(d)?)?)?)?)?)?)?)?)?)?)?)?)?)$E"
 PSRUN="$PSRUN|$B${P}cmd$X([[:space:]]+/{1,2}[a-z]+)*[[:space:]]+/{1,2}[ckr]([[:space:]].*)?[$\`]"
+# Running or sourcing a file named as data (*.md, *.txt, *.tsv) or an image: none of them is code.
+DATARUN="$CMD(source|\.|$SHELLS|python[0-9.]*|perl|ruby|node|php|osascript)$X([[:space:]]+-[A-Za-z]+)*[[:space:]]+(<[[:space:]]*)?[\"']?[^[:space:];|&<>\"']*\.(md|txt|tsv|png|jpe?g|gif|webp)([\"'[:space:];|&)]|$)"
 # A pipe into a shell or cmd, and a decoder.
 PIPE="(^|[[:space:]])\|[[:space:]]*$P($SHELLS|cmd)$X([[:space:];&)\"'\\\`]|$)"
 PIPE="$PIPE|${B}base64([[:space:]]+-[A-Za-z-]+)*[[:space:]]+(-[A-Za-z]*[dD][A-Za-z]*|--decode)$E|${B}xxd([[:space:]]+-[A-Za-z]+)*[[:space:]]+-r"
@@ -224,6 +229,30 @@ is_image() {
   case "$(printf '%s' "$1" | tr 'A-Z' 'a-z')" in docs/*.png|docs/*.jpg|docs/*.jpeg|docs/*.gif|docs/*.webp) return 0 ;; esac
   return 1
 }
+# image_ok PATH: HEAD's copy of PATH starts with the bytes of the image kind its name says.
+image_ok() {
+  _m=$(git cat-file blob "$HEAD:$1" 2>/dev/null | head -c 12 | od -An -tx1 | tr -d ' \n')
+  case "$(printf '%s' "$1" | tr 'A-Z' 'a-z')" in
+    *.png) case $_m in 89504e470d0a1a0a*) return 0 ;; esac ;;
+    *.jpg|*.jpeg) case $_m in ffd8ff*) return 0 ;; esac ;;
+    *.gif) case $_m in 474946383761*|474946383961*) return 0 ;; esac ;;
+    *.webp) case $_m in 52494646????????57454250) return 0 ;; esac ;;
+  esac
+  return 1
+}
+# fences: "number<TAB>sh" or "number<TAB>ps" for each line of HEAD's PATH inside a fenced code
+# block (``` or ~~~), ps when the block is marked powershell, pwsh, ps or ps1.
+fences() {
+  git show "$HEAD:$1" 2>/dev/null | awk -v T="$TAB" '
+    !f && match($0, /^[[:space:]]*(```+|~~~+)/) {
+      m = substr($0, RSTART, RLENGTH); sub(/^[[:space:]]*/, "", m); f = 1
+      lang = tolower(substr($0, RSTART + RLENGTH)); gsub(/[^a-z0-9]/, "", lang)
+      ps = (lang ~ /^(powershell|pwsh|ps|ps1)$/); next
+    }
+    f { t = $0; gsub(/^[[:space:]]+|[[:space:]]+$/, "", t)
+        if (length(t) >= length(m) && t ~ ("^" substr(m, 1, 1) "+$")) { f = 0; next }
+        print NR T (ps ? "ps" : "sh") }'
+}
 
 N=0
 while IFS= read -r -d '' meta && IFS= read -r -d '' path; do
@@ -239,10 +268,18 @@ while IFS= read -r -d '' meta && IFS= read -r -d '' path; do
   if [ "$oldmode" != 000000 ] && [ "$newmode" != 000000 ] && [ "$oldmode" != "$newmode" ]; then
     finding mode "$path" 0 "mode $oldmode to $newmode"
   fi
+  # A binary file is never read, so only an image under docs/ whose first bytes are that kind of
+  # image passes; a file named as an image that git reads as text is not one.
   if is_binary "$path"; then
-    [ "$status" = D ] || is_image "$path" || finding hidden "$path" 0 "a binary file"
+    if [ "$status" != D ]; then
+      if ! is_image "$path"; then finding hidden "$path" 0 "a binary file"
+      elif ! image_ok "$path"; then finding hidden "$path" 0 "a binary file that does not start as the image its name says"; fi
+    fi
     continue
   fi
+  case "$(printf '%s' "$path" | tr 'A-Z' 'a-z')" in
+    *.png|*.jpg|*.jpeg|*.gif|*.webp) [ "$status" = D ] || image_ok "$path" || finding hidden "$path" 0 "a file named as an image that is not one" ;;
+  esac
   [ "$status" = D ] && ! { case "$path" in data/*.tsv) true ;; *) false ;; esac; } && continue
 
   # Each added line as "+<TAB>number<TAB>text", each removed line as "-<TAB>number<TAB>text".
@@ -287,13 +324,13 @@ while IFS= read -r -d '' meta && IFS= read -r -d '' path; do
     esac
     cp "$W/add" "$W/add-net"
     if [ "$ps" = 1 ]; then
-      rule run "$RUN_PS|$PSRUN|$PIPE" "$W/code-run" -i
+      rule run "$RUN_PS|$PSRUN|$PIPE|$DATARUN" "$W/code-run" -i
       call_operator
       rule network "$NET_PS" "$W/add-net" -i
     else
       rule run "$RUN_SH" "$W/code-run"
       rule run "$INLINE" "$W/code-run"
-      rule run "$PSRUN" "$W/code-run" -i
+      rule run "$PSRUN|$DATARUN" "$W/code-run" -i
       case "$path" in tests/*) ;; *) rule run "$SHELL_FILE" "$W/code-run" ;; esac
       rule network "$NET_SH" "$W/add-net"
     fi
@@ -310,6 +347,15 @@ while IFS= read -r -d '' meta && IFS= read -r -d '' path; do
         rule network "$URL" "$W/code-own" -i ;;
     esac
   fi
+  # A doc's commands are run by the people who read it: its fenced code gets the network rule.
+  case "$path" in
+    *.md)
+      fences "$path" > "$W/fence"
+      awk -F "$TAB" 'NR == FNR { if ($2 == "sh") k[$1] = 1; next } $1 in k' "$W/fence" "$W/add" > "$W/fence-sh"
+      awk -F "$TAB" 'NR == FNR { if ($2 == "ps") k[$1] = 1; next } $1 in k' "$W/fence" "$W/add" > "$W/fence-ps"
+      rule network "$NET_SH" "$W/fence-sh"
+      rule network "$NET_PS" "$W/fence-ps" -i ;;
+  esac
   case "$path" in
     data/*/*) ;;
     data/*.tsv) rule shrink "^[[:space:]]*[^#[:space:]]" "$W/del" ;;

