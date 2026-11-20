@@ -8004,13 +8004,18 @@ function Act-Uses([string]$t) {
       Act-Use $v; continue
     }
     if ($line.IndexOf('{') -lt 0 -or $line -match '^[ \t]*#') { continue }
-    # The line before its comment: each quote and # found in one pass, a quote opening or closing one
-    # only outside the other kind.
-    $s = $line; $q = ''; $i = 0
+    # The line before its comment: each quote and # found in one pass. A quote opens a string only
+    # outside the other kind and where a value starts (the last character before it that is not a
+    # space or a tab: none, or one of { [ , : -), or right after the same quote closed one ('' inside
+    # single quotes); any other quote, as in Don't, is part of plain text. As gird-check.sh's nocmt.
+    $s = $line; $q = ''; $i = 0; $cl = -2
     while (($i = $s.IndexOfAny([char[]]'"''#', $i)) -ge 0) {
       $c = [string]$s[$i]
-      if ($q) { if ($c -eq $q) { $q = '' } }
-      elseif ($c -ne '#') { $q = $c }
+      if ($q) { if ($c -eq $q) { $q = ''; $cl = $i } }
+      elseif ($c -ne '#') {
+        $b = $i - 1; while ($b -ge 0 -and ($s[$b] -eq ' ' -or $s[$b] -eq "`t")) { $b-- }
+        if ($b -lt 0 -or '{[,:-'.IndexOf($s[$b]) -ge 0 -or ($c -eq "'" -and $cl -eq $i - 1 -and $s[$cl] -eq "'")) { $q = $c }
+      }
       elseif ($i -gt 0 -and ($s[$i - 1] -eq ' ' -or $s[$i - 1] -eq "`t")) { $s = $s.Substring(0, $i - 1); break }
       $i++
     }

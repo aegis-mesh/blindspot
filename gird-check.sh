@@ -8909,21 +8909,36 @@ act_uses() { # workflow: "owner/repo<TAB>ref" for each uses: line, owner/repo in
       split(a, p, "/"); print tolower(p[1] "/" p[2]) "\t" r
     }
     # The line before its comment, split once on its double quotes and each piece once on its single
-    # quotes (a gsub over many quotes is slow in some awks). A quote opens or closes a string only
-    # outside the other kind; k and kk count the characters before a piece.
-    function nocmt(s,   nd, d, j, ns, x, m, q, k, kk, h, h2) {
+    # quotes (a gsub over many quotes is slow in some awks). A quote opens a string only outside the
+    # other kind and where a value starts (lc, the last character before it that is not a space or a
+    # tab: none, or one of { [ , : -), or right after the same quote closed one (a single quote written
+    # twice inside single quotes); any other quote, as in the word dont with its apostrophe, is part of
+    # plain text. k and kk count the characters before a piece.
+    function opn(c) { return c == "" || index("{[,:-", c) > 0 }
+    function nocmt(s,   nd, d, j, ns, x, m, q, k, kk, h, h2, lc, cl) {
       if (!index(s, "#")) return s
-      nd = split(s, d, "\""); k = 0; q = ""
+      nd = split(s, d, "\""); k = 0; q = ""; lc = ""; cl = 0
       for (j = 1; j <= nd; j++) {
-        if (j > 1 && q != "\047") q = q == "" ? "\"" : ""
+        if (j > 1) {
+          if (q == "\"") { q = ""; lc = "\"" }
+          else if (q == "") { if (opn(lc)) q = "\""; else lc = "\"" }
+        }
         if (q != "\"") {
           if (index(d[j], "\047")) ns = split(d[j], x, "\047"); else { ns = 1; x[1] = d[j] }
           kk = k
           for (m = 1; m <= ns; m++) {
-            if (m > 1) q = q == "" ? "\047" : ""
-            if (q == "") { h = index(x[m], " #"); h2 = index(x[m], "\t#"); if (h2 && (!h || h2 < h)) h = h2; if (h) return substr(s, 1, kk + h - 1) }
+            if (m > 1) {
+              if (q == "\047") { q = ""; lc = "\047"; cl = m }
+              else if (opn(lc) || (cl == m - 1 && x[m - 1] == "")) q = "\047"
+              else lc = "\047"
+            }
+            if (q == "") {
+              h = index(x[m], " #"); h2 = index(x[m], "\t#"); if (h2 && (!h || h2 < h)) h = h2; if (h) return substr(s, 1, kk + h - 1)
+              if (match(x[m], /[^ \t][ \t]*$/)) lc = substr(x[m], RSTART, 1)
+            }
             kk += length(x[m]) + 1
           }
+          cl = 0
         }
         k += length(d[j]) + 1
       }

@@ -3892,6 +3892,13 @@ has    "a # inside a quoted name does not cut off the uses: after it" 'Uses tj-a
 has    "nor one in single quotes with a quote written twice" 'Uses tj-actions/changed-files@v32, compromised' "$GB/out.txt"
 hasnot "a flow-style step after a quoted name, in a comment, is not read" 'changed-files@v33' "$GB/out.txt"
 has    "a flow mapping over several lines: the comma after the value is not in the ref" 'Uses tj-actions/changed-files@v45\.0\.7, compromised' "$GB/out.txt"
+# An apostrophe in a plain name is plain text: the comment after it is still a comment, and a uses:
+# before a comment on such a line is still read.
+GD=$WORK/gd; rm -rf "$GD"; mkdir -p "$GD/code/a/.github/workflows" "$GD/AppData/Roaming" "$GD/AppData/Local/Temp"
+printf "jobs:\n  a:\n    steps:\n      - {name: Don't cache, uses: actions/checkout@v4} # was: {uses: tj-actions/changed-files@v38}\n      - {name: it's ok, uses: tj-actions/changed-files@v39} # note\n" > "$GD/code/a/.github/workflows/ci.yml"
+GA_RUN "$GD" "$GD/out.txt"
+hasnot "an apostrophe in a plain name does not hide the comment after it" 'changed-files@v38' "$GD/out.txt"
+has    "and a uses: before a comment on such a line is read" 'Uses tj-actions/changed-files@v39, compromised' "$GD/out.txt"
 has    "a step in a flow sequence is read"              'Uses tj-actions/changed-files@v44, compromised' "$GB/out.txt"
 has    "the workflows of a repo 4 folders down are read" '~/src/github\.com/org/repo/\.github/workflows/ci\.yml Uses tj-actions/changed-files@v35' "$GB/out.txt"
 has    "and those of a repo 5 folders down"             '~/a/b/c/d/repo/\.github/workflows/ci\.yaml Uses tj-actions/changed-files@v36' "$GB/out.txt"
