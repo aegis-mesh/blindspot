@@ -3582,6 +3582,37 @@ mkdir -p "$GA/code/locked"; chmod 000 "$GA/code/locked"
 GA_RUN "$GA" "$GA/partial.txt"
 chmod 755 "$GA/code/locked"
 has    "a folder the scan cannot read leaves the row not fully checked" 'GitHub Actions +not fully checked: some folders were not read' "$GA/partial.txt"
+# A flow-style step ({uses: ...}), a uses: with its value on the next line, a step in a flow sequence, and
+# the workflows of a repo 4 or 5 folders down (the scan reads the workflows of every .github folder it
+# reaches) are read; a flow-style step in a comment, and a repo 6 folders down, past the scan, are not. A
+# workflows folder down there that can't be read leaves the row not fully checked.
+GB=$WORK/gb; rm -rf "$GB"; mkdir -p "$GB/code/a/.github/workflows" "$GB/src/github.com/org/repo/.github/workflows" "$GB/a/b/c/d/repo/.github/workflows" \
+  "$GB/a/b/c/d/e/repo/.github/workflows" "$GB/AppData/Roaming" "$GB/AppData/Local/Temp"
+printf 'jobs:\n  a:\n    steps:\n      - {uses: tj-actions/changed-files@v40, name: x}\n      - {name: y, uses: "tj-actions/changed-files@v41"}\n      - uses:\n          tj-actions/changed-files@v42\n      # - {uses: tj-actions/changed-files@v43}\n  b:\n    steps: [{uses: actions/checkout@v4}, {uses: tj-actions/changed-files@v44}]\n' > "$GB/code/a/.github/workflows/ci.yml"
+for _d in src/github.com/org/repo:v35:yml a/b/c/d/repo:v36:yaml a/b/c/d/e/repo:v37:yml; do
+  printf 'jobs:\n  a:\n    steps:\n      - uses: tj-actions/changed-files@%s\n' "$(echo "$_d" | cut -d: -f2)" > "$GB/${_d%%:*}/.github/workflows/ci.$(echo "$_d" | cut -d: -f3)"
+done
+GA_RUN "$GB" "$GB/out.txt"
+has    "a flow-style step is read"                      'Uses tj-actions/changed-files@v40, compromised on 14 and 15 March 2025' "$GB/out.txt"
+has    "and one whose uses: comes after its name"       'Uses tj-actions/changed-files@v41, compromised' "$GB/out.txt"
+has    "a uses: with its value on the next line is read" 'Uses tj-actions/changed-files@v42, compromised' "$GB/out.txt"
+hasnot "a flow-style step in a comment is not read"     'changed-files@v43' "$GB/out.txt"
+has    "a step in a flow sequence is read"              'Uses tj-actions/changed-files@v44, compromised' "$GB/out.txt"
+has    "the workflows of a repo 4 folders down are read" '~/src/github\.com/org/repo/\.github/workflows/ci\.yml Uses tj-actions/changed-files@v35' "$GB/out.txt"
+has    "and those of a repo 5 folders down"             '~/a/b/c/d/repo/\.github/workflows/ci\.yaml Uses tj-actions/changed-files@v36' "$GB/out.txt"
+hasnot "a repo 6 folders down, past the scan, is not read" 'changed-files@v37' "$GB/out.txt"
+SKIPPING=""; [ "${EUID:-$(id -u)}" -eq 0 ] && SKIPPING="running as root, which reads a folder with no read permission"
+rm -rf "$GB/code/a" "$GB/a"; chmod 000 "$GB/src/github.com/org/repo/.github/workflows"
+GA_RUN "$GB" "$GB/deep.txt"
+chmod 755 "$GB/src/github.com/org/repo/.github/workflows"
+has    "a workflows folder that far down that can't be read leaves the row not fully checked" 'GitHub Actions +not fully checked' "$GB/deep.txt"
+SKIPPING=""
+# An awk that crashes reading a workflow (put first on PATH, as for the startup checks above) leaves it
+# counted as not read, never as one with no listed action.
+mkdir -p "$WORK/ast12/code/w/.github/workflows"
+printf 'jobs:\n  a:\n    steps:\n      - uses: tj-actions/changed-files@v44\n' > "$WORK/ast12/code/w/.github/workflows/ci.yml"
+ast10 ast12 wf '["\047]?uses["\047]?'
+has    "an awk that crashes reading a workflow leaves the Actions row not fully checked" 'GitHub Actions +not fully checked: 1 workflow file could not be read' "$WORK/ast12-wf.txt"
 
 echo "a new incident of each kind is data lines only"
 # tests/made-up.sh appends a made-up platform, startup file, wiper file, planted file and Python

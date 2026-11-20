@@ -1970,8 +1970,9 @@ What is not on the lists, and why:
 
 GitHub Actions workflows:
 
-- It reads the workflows of the projects it finds (`.github/workflows/*.yml` and `*.yaml`) for an
-  action whose code was replaced by malware for a time, from its GitHub advisory or a named research
+- It reads the workflows of the projects it finds (`.github/workflows/*.yml` and `*.yaml`, in every
+  `.github` folder the home scan reaches, so a repo up to 5 folders down, such as
+  `~/src/github.com/org/repo`) for an action whose code was replaced by malware for a time, from its GitHub advisory or a named research
   firm's post. A use matches on a tag or a malicious commit its source names. A pin to any other
   commit does not, except for the five reviewdog actions, whose advisory says every pin ran the
   malware, and `trivy-action`, where a pin to a commit from before 9 April 2025 did: a pin to its safe
@@ -1980,6 +1981,8 @@ GitHub Actions workflows:
   so a match is a project to check, never a compromised machine: check the workflows' run logs from
   then, rotate the secrets they could read, look in the project's history for commits by
   `github-actions[bot]` you didn't make, and pin or remove the action.
+- A `uses:` is read in a step written as a block (`- uses: ...`, its value on the same line or the
+  next) or as a flow mapping (`- {uses: ...}`, `[{uses: ...}]`).
 - Composite actions a project keeps in its own folders, and workflows in folders below
   `.github/workflows`, which GitHub does not run, are not read.
 
@@ -1988,7 +1991,8 @@ Each data file's header gives the sources and reasons for every line.
 ## What it does not read
 
 - Containers, servers and CI.
-- The home scan goes 6 folders deep and skips dependency, build and cache folders (`node_modules`,
+- The home scan goes 6 folders deep (a project's GitHub workflows 8, so a repo 5 folders down has
+  them read) and skips dependency, build and cache folders (`node_modules`,
   `build`, `dist`, `target` and `vendor` among them). A lockfile or project file deeper or in one of
   those is not read, and the npm row says so.
 - These are named as not checked, and the summary doesn't read clean over them:

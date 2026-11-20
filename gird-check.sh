@@ -1342,11 +1342,19 @@ EOF
     for e in "$d"/* "$d"/.[!.]*; do [ -d "$e" ] && [ ! -L "$e" ] || continue
       if [ ! -x "$e" ]; then printf "find: %s: Permission denied\n" "$e" >&2
       elif [ -f "$e/pyvenv.cfg" ] && [ ! -L "$e/pyvenv.cfg" ]; then printf "%s\n" "$e/pyvenv.cfg"; fi; done; done'
+  # A project's .github folder 5 or 6 folders down, where the scan stops before its workflows: sh lists
+  # its workflows folder as the scan would (regular files ending in .yml or .yaml), so a repo as deep as
+  # ~/src/github.com/org/repo has its workflows read. A workflows folder it can't read is named in
+  # find's own words.
+  # shellcheck disable=SC2016  # $d, $w and $f are for the sh that find starts
+  _ghw='for d; do w=$d/workflows; [ -d "$w" ] && [ ! -L "$w" ] || continue
+    if [ ! -r "$w" ] || [ ! -x "$w" ]; then printf "find: %s: Permission denied\n" "$w" >&2; continue; fi
+    for f in "$w"/* "$w"/.[!.]* "$w"/..?*; do case "$f" in *.yml|*.yaml) [ -f "$f" ] && [ ! -L "$f" ] && printf "%s\n" "$f" ;; esac; done; done'
   if find /dev/null -maxdepth 0 -ilname x >/dev/null 2>&1; then
     _lk=(-ilname '*authorized_keys' -exec printf 'L %s\n' {} +); _ls=(-exec printf 'S %s\n' {} +); _lx=(-exec sh -c "$_ld" sh {} +)
     [ -e "$H/.ssh/authorized_keys" ] && _lk=(\( -ilname '*authorized_keys' -o ! -lname '/*' -o -lname "$H/*" \) -exec printf 'L %s\n' {} +)
-    _tx=(-exec sh -c "$_tz" sh {} +)
-  else _lk=(-exec printf 'L %s\n' {} \;); _ls=(-exec printf 'S %s\n' {} \;); _lx=(-exec sh -c "$_ld" sh {} \;); _tx=(-exec sh -c "$_tz" sh {} \;); fi
+    _tx=(-exec sh -c "$_tz" sh {} +); _gx=(-exec sh -c "$_ghw" sh {} +)
+  else _lk=(-exec printf 'L %s\n' {} \;); _ls=(-exec printf 'S %s\n' {} \;); _lx=(-exec sh -c "$_ld" sh {} \;); _tx=(-exec sh -c "$_tz" sh {} \;); _gx=(-exec sh -c "$_ghw" sh {} \;); fi
   set -- -name node_modules -o -name .git -o -name .Trash -o -name .cache -o -name .npm \
     -o -name .pnpm-store -o -name .yarn -o -name .cargo -o -name .rustup -o -name .gradle \
     -o -name .m2 -o -name .pyenv -o -name .rbenv -o -name .nvm -o -name .bun -o -name .deno \
@@ -1372,6 +1380,7 @@ EOF
   BS_PC=$_pc BS_PV=$_pv find -H "$H" -maxdepth 6 \( -type d -name "*$_nl*" -prune -exec sh -c 'printf "N %s\n" "$(printf "%s" "$1" | tr "\n" "?")"' sh {} \; \) -o \
     \( -type d -name .tox -prune "${_tx[@]}" \) -o \
     \( -type d \( "$@" \) -prune \) -o \
+    \( -type d -name .github -path "$H/*/*/*/*/.github" "${_gx[@]}" \) -o \
     \( -type d -name site-packages -print -prune \) -o \
     \( -type f \( -name .env -o -name '.env.*' -o -name .envrc -o -name .mcp.json -o -name pyvenv.cfg \
        -o -path '*/.claude/settings.local.json' -o -path '*/.claude/settings.json' \
@@ -8735,21 +8744,49 @@ checkmarx/kics-github-action|Checkmarx/kics-github-action|v1 v1.0 v1.1 v1.2 v1.3
 actions-cool/issues-helper|actions-cool/issues-helper|v3.8.0 v3.7.6 v3.7.5 v3.7.4 v3.7.3 v3.7.2 v3.7.1 v3.7.0 v3.6.3 v3.6.2 v3.6.1 v3.6.0 v3.5.2 v3.5.1 v3.5.0 v3.4.0 v3.3.3 v3.3.2 v3.3.1 v3.3.0 v3.2.1 v3.2.0 v3.1.0 v3.0.1 v3.0.0 v3 v2.5.0 v2.4.3 v2.4.2 v2.4.1 v2.4.0 v2.3.1 v2.3.0 v2.2.1 v2.2.0 v2.1.2 v2.1.1 v2.1.0 v2.0.0 v2 v1.12 v1.11 v1.10 v1.9 v1.8 v1.7 v1.6 v1.5 v1.4 v1.3 v1.2 v1.1 v1|1c9e803c80cc7fed000022d4c94f4b5bc2e90062,f0448c62fc57b8a5ce23d8acd6e795cdd76a3b6c,abc4310e6b8520aff6af79a4880217917cd1436b,aea87833045e38098e64310e962b897ae8aaba33,aeb05195dbd618afce6f22ca4937e46940d86be1,4b10341e231301a86c66f6c09e3e4de76d8719fe,8a3a7c2960ff3a4e3fd1481cfd1eb31301e16337,aa44b5492c787fbc4c51edb8d98d88b668fe89d1,03bbf452b52fb318196d9c193fd178a79a6d7f9b,257849272e291fb74ff4bee4d3be4796dd35fbbb,4bb72d31eaee87562b70a0cf1b93579bb2b14c23,e0585c10366288eeec3117d65ed24240ccbf1f47,419b34c603623ea8749a98b7153df20e389dd0ec,8cc2629c5681d794c494b79283d23aa3ce78749c,4b69521f9829a1114b94d74fdc1a38f2291d8c34,dc5687b71897e8b57bc9743e325ac72cee763c9c,3846bd4230da36f68a4cc1527298ca9ab2652fb9,459b0cfc4dd708b6218b72a7a01dda6c6a7ab0c0,fa6a4ca487f2dc699d428126ea2b18e9d0d15c9d,15c89f718cd325833aad8000d3ec72e2660f6584,a7d3c46a35564fa85321f3557700f6ea0c0616a9,85c9d842e1c0f41f8805f17600c25237e08a0224,64ed6d61b6eee8744417e1d1cc651665a8bce236,d9b1764cbe78ec9b12f01a66b2d2c902b15981b6,b9c83f01929e190cda300e76f688bf7ea7e37a7a,147337a919d92f4bf42f02843682d694650f1e22,e9631d2e615d95a19111c272049444fb073a99be,91b26b99c50ad890f98c2184d251bd3a16f5b1b1,3f4d6804812734dfe945bbe8ef619f151e4b27f6,46eff1378ad0faee27c017ebd97f605548777098,071e169dfb36005b3262b3853c9894698b8b303b,55253d49c68133ae52e791a3f1f8242b191f5e91,edf8cf78d6feeb5a73cda9317af5ddfc4da6c5fd,a0c53dd42fc842d2f9276c5a1d4f9a26abe8713d,896379edfaac994ff214a3097c6c82e21be16066,9bd6ce03e0c279f347b519548b87d26699ad31c9,d2877f69bae9d8dcbadb06b3214ebf0789ed566e,601e1296a5a0853b5e109f9820151c72619e11e4,75fb02043af24e6f3eaf534464de338173993629,3480e51eec2be03a70d6fe17507413a96fe5b57d,67716d94ad07d7fe793cabc6f6d1ffe24f77bdf7,cd96d6518c6338f8510638bce764c7abd7194983,6a538e928b8856062de61103ed5a08f0ea0faee9,9793761b1bc3dde7ad1ccb9be6211919e20a3f01,8a64710bb8fee9f5c92eb1a816e016ed00fbcce0,710ff89debb143f6859cf8d54c0e8739224ff6c1,3904fe935f1a18fee5dbad6db46a66c9dcffde01,cfbd14ccc97afd3baa822bd231df8460e4f02f29,15dc537110a44b0625622e82b7d6ca95583f276a,e778a401e233bf0a416f3fe2a52d9039949b30a6,203671479d663755cb5bf8ffbeca6d2b685af7ae,a7156495f3403674cafe3796382bded1d9af8931,5c267592a87e92c2b005b338bd0d2724c2f64acb|-|safe|from 18 May 2026|stepsecurity.io|Remove it. Every tag was moved to a malicious commit, and in September 2026 the tags still ran it.
 actions-cool/maintain-one-comment|actions-cool/maintain-one-comment|v3.3.0 v3.2.1 v3.2.0 v3.1.1 v3.1.0 v3 v2.0.2 v2.0.1 v2.0.0 v2 v1.2.1 v1.2.0 v1.1.0 v1.0.0 v0.0.1-wip|7f6120bb10c870b9fde146961a18e5bf0b3d4401,4a6ac28684e2b0c48d502b31363ec5dd72f9d7ff,f3593fb4454aff5a6e1fb67024f94bfa48591dd5,5d844d6b1c6a0c09a96844521bb01f149d9fe2c1,2ab0aa3449ffe526ea64489193955d82a6848669,c43d668894bebbeea688878ab6774fa405f22251,93ec180e89e8fdd8525869daa5590c433b6c30fb,cbb2ba52a811cb6152eee0607519cc5df78289b5,99b7f41bf9e14a2a2c7cc524731336543f552178,ef01721dfd04f9c7ff1a256292f7dceabfd08d9b,d6622cc2415156cf4e81cf57866420479a966b3a,74b8a9a600daf6fc6070ca0a10d840a7bb6890ae,cae76b34894429e693e9b0d2731e7654c373ce81,7bb44528a0869f4074cc5448601804878704963f,8bb68050bc2a353f9d3032e2b42732a69d97499b|-|safe|from 18 May 2026|stepsecurity.io|Remove it. Every tag was moved to a malicious commit."
 # <<< actions
+# A uses: is read in a block mapping (- uses: x@v1), with its value on the next line when that line is
+# indented more than the key (uses: on its own, or with | or >), and in a flow mapping ({uses: x@v1}),
+# after the { or a , on a line that has one, a # comment cut off first. Each line is split on its { and
+# its , once, so the time grows with the size of the file.
 act_uses() { # workflow: "owner/repo<TAB>ref" for each uses: line, owner/repo in lowercase
-  awk '{ sub(/\r$/, "") }
-    match($0, /^[ \t]*(-[ \t]+)?["\047]?uses["\047]?[ \t]*:[ \t]*/) {
-      v = substr($0, RSTART + RLENGTH); q = substr(v, 1, 1)
-      if (q == "\"" || q == "\047") { v = substr(v, 2); i = index(v, q); if (i == 0) next; v = substr(v, 1, i - 1) }
+  awk '
+    function use(v,   q, i, at, a, r, p) {
+      q = substr(v, 1, 1)
+      if (q == "\"" || q == "\047") { v = substr(v, 2); i = index(v, q); if (i == 0) return; v = substr(v, 1, i - 1) }
       else { sub(/[ \t]+#.*$/, "", v); sub(/[ \t]+$/, "", v) }
-      at = index(v, "@"); if (at == 0) next
+      at = index(v, "@"); if (at == 0) return
       a = substr(v, 1, at - 1); r = substr(v, at + 1)
-      if (a !~ /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+(\/.*)?$/ || r == "" || r ~ /[ \t]/) next
-      n = split(a, p, "/"); print tolower(p[1] "/" p[2]) "\t" r }' "$1" 2>/dev/null
+      if (a !~ /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+(\/.*)?$/ || r == "" || r ~ /[ \t]/) return
+      split(a, p, "/"); print tolower(p[1] "/" p[2]) "\t" r
+    }
+    { sub(/\r$/, "") }
+    nx > 0 {
+      if ($0 ~ /^[ \t]*(#|$)/) next
+      w = nx; nx = 0; match($0, /^[ \t]*/)
+      if (RLENGTH >= w) { use(substr($0, RLENGTH + 1)); next }
+    }
+    match($0, /^[ \t]*(-[ \t]+)?["\047]?uses["\047]?[ \t]*:[ \t]*/) {
+      v = substr($0, RSTART + RLENGTH)
+      if (v ~ /^(#.*)?$/ || v ~ /^[|>][0-9+-]*[ \t]*(#.*)?$/) { match($0, /^[ \t]*(-[ \t]+)?/); nx = RLENGTH + 1; next }
+      use(v); next
+    }
+    index($0, "{") && $0 !~ /^[ \t]*#/ {
+      s = $0; h = index(s, " #"); if (h) s = substr(s, 1, h - 1); h = index(s, "\t#"); if (h) s = substr(s, 1, h - 1)
+      n = split(s, c, "{")
+      for (i = 2; i <= n; i++) {
+        m = split(c[i], d, ",")
+        for (j = 1; j <= m; j++) if (match(d[j], /^[ \t]*["\047]?uses["\047]?[ \t]*:[ \t]*/)) {
+          v = substr(d[j], RLENGTH + 1); k = index(v, "}"); if (k) v = substr(v, 1, k - 1); use(v)
+        }
+      }
+    }' "$1" 2>/dev/null
 }
 ACT_HITS=""; ACT_UNREAD=0; N_WF=0
 while IFS= read -r _wf; do
   [ -n "$_wf" ] || continue
   if [ ! -r "$_wf" ] || too_big "$_wf"; then ACT_UNREAD=$((ACT_UNREAD + 1)); continue; fi
+  # An awk that fails leaves the workflow not read, never one with no listed action.
+  _au=$(act_uses "$_wf") || { ACT_UNREAD=$((ACT_UNREAD + 1)); continue; }
   N_WF=$((N_WF + 1))
   while IFS="$TAB" read -r _ua _ur; do
     [ -n "$_ua" ] || continue
@@ -8782,7 +8819,7 @@ $_row
 $ACT_TABLE
 EOF
   done <<EOF
-$(act_uses "$_wf")
+$_au
 EOF
 done <<EOF
 $WORKFLOWS

@@ -308,6 +308,7 @@ a grep that crashes picking the folder-open tasks names the file as not read	gir
 a grep that crashes matching a hook that runs a worm file names the file as not read	gird-check.ps1 matches with .NET regular expressions and runs no grep, so there is no grep to crash
 a grep that crashes matching the AntV hook names your settings file as not read	gird-check.ps1 matches with .NET regular expressions and runs no grep, so there is no grep to crash
 an awk that crashes reading Codex's config.toml names it as not read	gird-check.ps1 reads these files with .NET and runs no awk, so there is no awk to crash
+an awk that crashes reading a workflow leaves the Actions row not fully checked	gird-check.ps1 reads these files with .NET and runs no awk, so there is no awk to crash
 fleet one file: tools/gen.sh builds it under 1,000,000 bytes, starting #!/bin/bash -p	blindspot-fleet.sh carries gird-check.sh as plain text, built by tools/gen.sh's bash-only part; blindspot-fleet.ps1's build has its own tests in run-ps.sh (under 200 KB, its SHA-256, the 80% warning)
 fleet one file: it carries gird-check.sh without the game block, byte for byte, and that SHA-256	the game, and the copy without it, are gird-check.sh's alone: gird-check.ps1 has no game
 fleet one file: outside its two packed blocks it is gird-fleet.sh	blindspot-fleet.sh carries gird-check.sh as plain text, built by tools/gen.sh's bash-only part; blindspot-fleet.ps1's build has its own tests in run-ps.sh (under 200 KB, its SHA-256, the 80% warning)

@@ -1008,6 +1008,19 @@ function Scan-Tox([string]$dir) {
     foreach ($c in $cs) { if ($c.Name -ceq 'pyvenv.cfg' -and -not (Is-Link $c)) { Add-Plain $Found $c } }
   }
 }
+# A project's .github folder 5 or 6 folders down, where the scan stops before its workflows: its
+# workflows folder is listed as the scan would list it (regular files ending in .yml or .yaml), so a repo
+# as deep as ~/src/github.com/org/repo has its workflows read. One that can't be listed is named as a
+# folder not read. As gird-check.sh's scan_home.
+function Scan-Workflows([string]$dir) {
+  try { $wi = Get-Item -LiteralPath $dir -Force -ErrorAction Stop } catch { return }
+  if ((Is-Link $wi) -or -not (Is-DirInfo $wi)) { return }
+  try { $es = ([IO.DirectoryInfo]$dir).GetFileSystemInfos() } catch { $UnreadDirs.Add($dir); return }
+  foreach ($e in @($es | Sort-Object -Property Name -CaseSensitive)) {
+    if ((Is-Link $e) -or (Is-DirInfo $e)) { continue }
+    if ($e.Name -clike '*.yml' -or $e.Name -clike '*.yaml') { Add-Plain $Workflows $e }
+  }
+}
 function Scan-Home([string]$dir, [int]$depth) {
   try { $es = ([IO.DirectoryInfo]$dir).GetFileSystemInfos() } catch { $UnreadDirs.Add($dir); return }
   foreach ($e in @($es | Sort-Object -Property Name -CaseSensitive)) {
@@ -1020,6 +1033,7 @@ function Scan-Home([string]$dir, [int]$depth) {
       if ($name -ceq '.tox') { Scan-Tox $path; continue }
       if (Is-Pruned $path $name $d) { continue }
       if ($name -ceq 'site-packages') { $Sites.Add($path); continue }
+      if ($name -ceq '.github' -and $d -ge 5) { Scan-Workflows (J $path 'workflows') }
       if ($d -lt 6) { Scan-Home $path $d }
       continue
     }
@@ -7837,19 +7851,42 @@ $ActTable = @(
   ,@('actions-cool/maintain-one-comment', 'actions-cool/maintain-one-comment', 'v3.3.0 v3.2.1 v3.2.0 v3.1.1 v3.1.0 v3 v2.0.2 v2.0.1 v2.0.0 v2 v1.2.1 v1.2.0 v1.1.0 v1.0.0 v0.0.1-wip', '7f6120bb10c870b9fde146961a18e5bf0b3d4401,4a6ac28684e2b0c48d502b31363ec5dd72f9d7ff,f3593fb4454aff5a6e1fb67024f94bfa48591dd5,5d844d6b1c6a0c09a96844521bb01f149d9fe2c1,2ab0aa3449ffe526ea64489193955d82a6848669,c43d668894bebbeea688878ab6774fa405f22251,93ec180e89e8fdd8525869daa5590c433b6c30fb,cbb2ba52a811cb6152eee0607519cc5df78289b5,99b7f41bf9e14a2a2c7cc524731336543f552178,ef01721dfd04f9c7ff1a256292f7dceabfd08d9b,d6622cc2415156cf4e81cf57866420479a966b3a,74b8a9a600daf6fc6070ca0a10d840a7bb6890ae,cae76b34894429e693e9b0d2731e7654c373ce81,7bb44528a0869f4074cc5448601804878704963f,8bb68050bc2a353f9d3032e2b42732a69d97499b', '-', 'safe', 'from 18 May 2026', 'stepsecurity.io', 'Remove it. Every tag was moved to a malicious commit.')
 )
 # <<< actions
+# A uses: is read in a block mapping (- uses: x@v1), with its value on the next line when that line is
+# indented more than the key (uses: on its own, or with | or >), and in a flow mapping ({uses: x@v1}),
+# after the { or a , on a line that has one, a # comment cut off first. As gird-check.sh's act_uses.
+function Act-Use([string]$v) {
+  if ($v.Length -gt 0 -and ($v[0] -eq '"' -or $v[0] -eq "'")) {
+    $q = $v[0]; $v = $v.Substring(1); $i = $v.IndexOf($q); if ($i -lt 0) { return }; $v = $v.Substring(0, $i)
+  } else { $v = $v -replace '[ \t]+#.*$', '' -replace '[ \t]+$', '' }
+  $at = $v.IndexOf('@'); if ($at -lt 0) { return }
+  $a = $v.Substring(0, $at); $r = $v.Substring($at + 1)
+  if ($a -cnotmatch '^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+(/.*)?$' -or $r -eq '' -or $r -match '[ \t]') { return }
+  $p = $a.Split('/'); ,@(($p[0] + '/' + $p[1]).ToLowerInvariant(), $r)
+}
 function Act-Uses([string]$t) {
+  $nx = 0
   foreach ($line in $t.Split("`n")) {
     $line = $line -replace "`r$", ''
+    if ($nx -gt 0) {
+      if ($line -match '^[ \t]*(#|$)') { continue }
+      $w = $nx; $nx = 0; $ind = [regex]::Match($line, '^[ \t]*').Length
+      if ($ind -ge $w) { Act-Use $line.Substring($ind); continue }
+    }
     $m = [regex]::Match($line, '^[ \t]*(-[ \t]+)?["'']?uses["'']?[ \t]*:[ \t]*')
-    if (-not $m.Success) { continue }
-    $v = $line.Substring($m.Length)
-    if ($v.Length -gt 0 -and ($v[0] -eq '"' -or $v[0] -eq "'")) {
-      $q = $v[0]; $v = $v.Substring(1); $i = $v.IndexOf($q); if ($i -lt 0) { continue }; $v = $v.Substring(0, $i)
-    } else { $v = $v -replace '[ \t]+#.*$', '' -replace '[ \t]+$', '' }
-    $at = $v.IndexOf('@'); if ($at -lt 0) { continue }
-    $a = $v.Substring(0, $at); $r = $v.Substring($at + 1)
-    if ($a -cnotmatch '^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+(/.*)?$' -or $r -eq '' -or $r -match '[ \t]') { continue }
-    $p = $a.Split('/'); ,@(($p[0] + '/' + $p[1]).ToLowerInvariant(), $r)
+    if ($m.Success) {
+      $v = $line.Substring($m.Length)
+      if ($v -match '^(#.*)?$' -or $v -match '^[|>][0-9+-]*[ \t]*(#.*)?$') { $nx = [regex]::Match($line, '^[ \t]*(-[ \t]+)?').Length + 1; continue }
+      Act-Use $v; continue
+    }
+    if ($line.IndexOf('{') -lt 0 -or $line -match '^[ \t]*#') { continue }
+    $s = $line; $h = $s.IndexOf(' #'); if ($h -ge 0) { $s = $s.Substring(0, $h) }; $h = $s.IndexOf("`t#"); if ($h -ge 0) { $s = $s.Substring(0, $h) }
+    $c = $s.Split('{')
+    for ($i = 1; $i -lt $c.Length; $i++) {
+      foreach ($d in $c[$i].Split(',')) {
+        $m = [regex]::Match($d, '^[ \t]*["'']?uses["'']?[ \t]*:[ \t]*')
+        if ($m.Success) { $v = $d.Substring($m.Length); $k = $v.IndexOf('}'); if ($k -ge 0) { $v = $v.Substring(0, $k) }; Act-Use $v }
+      }
+    }
   }
 }
 $ActHits = New-Object System.Collections.Generic.List[object]; $ActSeen = New-Object Collections.Hashtable ([StringComparer]::Ordinal); $ActUnread = 0; $N_WF = 0
