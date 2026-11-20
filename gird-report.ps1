@@ -668,7 +668,14 @@ function Get-InUseCodes([string]$Platform, [string]$Os) {
   if ($Os.StartsWith('Linux', [StringComparison]::Ordinal)) { return @(11) }
   return @()
 }
-$InUseCodes = @(Get-InUseCodes ([string][Environment]::OSVersion.Platform) ([string]$PSVersionTable['OS']))
+# The system's name, asked of .NET off Windows only: $PSVersionTable.OS names the distribution on Linux
+# (Ubuntu 24.04.5 LTS), never Linux.
+$InUseOs = ''
+if ([string][Environment]::OSVersion.Platform -cne 'Win32NT') {
+  if ([Runtime.InteropServices.RuntimeInformation]::IsOSPlatform([Runtime.InteropServices.OSPlatform]::OSX)) { $InUseOs = 'Darwin' }
+  elseif ([Runtime.InteropServices.RuntimeInformation]::IsOSPlatform([Runtime.InteropServices.OSPlatform]::Linux)) { $InUseOs = 'Linux' }
+}
+$InUseCodes = @(Get-InUseCodes ([string][Environment]::OSVersion.Platform) $InUseOs)
 function Test-InUse($X) { return ($X -is [IO.IOException] -and $InUseCodes -contains $X.HResult) }
 
 function Get-InputFiles {

@@ -3926,10 +3926,13 @@ hasnot "nor a saved command with a key in an allow rule"     "~${_d}code${_d}az$
 has    "where a Storage key in its place is one too"         "~${_d}code${_d}az${_d}\\.claude${_d}settings\\.local\\.json A saved command contains a key" "$PV/real.txt"
 
 echo "stopping processes"
-# gird-check.ps1 stops ripgrep through the Process object it started ($SessSt.Proc.Kill(): that process
-# alone, by the handle .NET holds), never by an id it looked up and never as a tree.
+# gird-check.ps1 stops ripgrep through the Process object it started, $SessSt.Proc: that process alone,
+# by the handle .NET holds, never by an id it looked up and never as a tree. It does so in two places:
+# the session check's own $halt, which holds the state as $st, and Sess-Stop, as $p = $SessSt.Proc.
 _k=$(grep -n 'taskkill\|Stop-Process\|\.Kill(\|Kill(\$true)' "$SCRIPT" | grep -v '^[0-9]*:[[:space:]]*#')
-if [ "$(printf '%s\n' "$_k" | grep -c .)" = 1 ] && printf '%s\n' "$_k" | grep -qF '$SessSt.Proc.Kill()'; then ok "the script stops only processes it started"
+if [ "$(printf '%s\n' "$_k" | grep -c .)" = 2 ] && [ "$(printf '%s\n' "$_k" | grep -cF '$halt = { $st.Stop = $true; $st.Stopped = $true; try { $st.Proc.Kill() }')" = 1 ] &&
+   [ "$(printf '%s\n' "$_k" | grep -cF 'if ($p) { try { $p.Kill() }')" = 1 ] && [ "$(grep -cF '$p = $SessSt.Proc' "$SCRIPT")" = 1 ] &&
+   grep -qF '$SessSt.Proc.Dispose()' "$SCRIPT"; then ok "the script stops only processes it started"
 else bad "the script stops only processes it started" "$(printf '%s' "$_k" | head -n 3 | tr '\n' '|')"; fi
 
 echo "MCP configs in plugin folders"

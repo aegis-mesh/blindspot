@@ -1773,7 +1773,7 @@ function Cmd-Scripts([string]$f, $els, [regex]$rxCmd, [regex]$rxPath) {
   foreach ($el in $els) {
     try {
       foreach ($m in @(@($el) + @(Cmd-Parts $el) | ForEach-Object { $rxCmd.Matches($_) })) {
-        $ps = $rxPath.Matches($m.Value)
+        $ps = @($rxPath.Matches($m.Value))
         if ($ps.Count -gt 0) { [void]$set.Add(($ps[$ps.Count - 1].Value -replace '[/\\]+', '/')) }
       }
     } catch { Mark-Slow $f }
@@ -2015,7 +2015,7 @@ $RxLeafTok = New-Object regex('"(?:[^"\\]|\\.)*("?)|[{}\[\]]|[^"{}\[\]]+', $RxOp
 function Json-Leaves([string]$f) {
   $out = New-Object System.Collections.Generic.List[string]
   $text = Flat-Text $f; if ($null -eq $text) { return ,$out }
-  try { $ms = $RxLeafTok.Matches($text); [void]$ms.Count } catch { Mark-Slow $f; return ,$out }
+  try { $ms = @($RxLeafTok.Matches($text)) } catch { Mark-Slow $f; return ,$out }
   $fs = [string][char]28
   $P = @{}; $T = @{}; $dep = 0; $ek = $false; $sc = ''; $key = ''
   foreach ($m in $ms) {
