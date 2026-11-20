@@ -16,6 +16,29 @@
 # before running it (CONTRIBUTING.md, Releases). Nothing else from the checkout runs before you
 # confirm the review.
 set -u
+unset CDPATH
+
+# Before any program runs: every folder on PATH must be absolute and outside this checkout, or a
+# file the checkout holds (a root-level "git", say) would run in place of the tool, before the
+# review below. Only shell builtins run until this passes.
+case $0 in */*) _d=${0%/*} ;; *) _d=. ;; esac
+case $0 in /*) SELF=$0 ;; *) SELF=$PWD/$0 ;; esac
+cd -P "$_d/.." 2>/dev/null || { printf 'release: %s\n' "can't find the repository" >&2; exit 1; }
+# path_ok DIR: says what is wrong, and fails, when a folder on PATH is relative, empty or inside DIR.
+path_ok() {
+  case ":$PATH:" in *::*) printf 'release: PATH has an empty entry, which means the current folder: remove it\n' >&2; return 1 ;; esac
+  _rest=$PATH
+  while [ -n "$_rest" ]; do
+    _p=${_rest%%:*}
+    case $_rest in *:*) _rest=${_rest#*:} ;; *) _rest="" ;; esac
+    case $_p in /*) ;; *) printf 'release: PATH holds the relative folder %s: remove it, so nothing in the checkout can run in place of a tool\n' "$_p" >&2; return 1 ;; esac
+    _r=$(cd -P "$_p" 2>/dev/null && pwd) || _r=$_p
+    for _x in "$_p" "$_r"; do
+      case "$_x/" in "$1/"*) printf 'release: PATH holds %s, inside the repository: remove it, so nothing in the checkout can run in place of a tool\n' "$_p" >&2; return 1 ;; esac
+    done
+  done
+}
+path_ok "$PWD" || exit 1
 
 RLIST=.github/release-files
 SIGNERS=.github/allowed_signers
@@ -58,16 +81,16 @@ for a in "$@"; do
   case $a in
     --dry-run) DRY=1 ;;
     --check-list) CL=1 ;;
-    -h|--help) sed -n '2,15p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help) sed -n '2,15p' "$SELF" | sed 's/^# \{0,1\}//'; exit 0 ;;
     -*) die "unknown option: $a" ;;
     *) [ -z "$V" ] || die "give one version"; V=$a ;;
   esac
 done
 
-cd "$(dirname "$0")/.." || die "can't find the repository"
 TOP=$(git rev-parse --show-toplevel 2>/dev/null) || die "not inside a git repository"
 cd "$TOP" || die "can't enter $TOP"
 TOP=$(pwd -P)
+path_ok "$TOP" || exit 1
 export GIT_NO_REPLACE_OBJECTS=1
 # Hooks and the file system monitor are programs a checkout could name; no git call here runs them.
 G() { git -c core.hooksPath=/dev/null -c core.fsmonitor=false "$@"; }
@@ -162,12 +185,15 @@ else
   FROM=$(G hash-object -t tree /dev/null); RANGE=$SHA; say "First release: every commit."
 fi
 say ""
-G --no-pager log --oneline "$RANGE"
+# A commit subject or a changed line can hold terminal control bytes that rewrite what is shown, and
+# a committed .gitattributes can turn a diff into "Binary files differ": every listing below is
+# shown as text, with each byte outside printable ASCII made visible (cat -v).
+G --no-pager log --no-decorate --format='%h %s' "$RANGE" | LC_ALL=C cat -v
 say ""
-G --no-pager diff --no-ext-diff --no-textconv --stat "$FROM" "$SHA"
+G --no-pager diff --no-ext-diff --no-textconv --text --stat "$FROM" "$SHA" | LC_ALL=C cat -v
 say ""
 say "In full, the changes to what releases and checks (tools/, .github/, .gitattributes, .gitmodules):"
-G --no-pager diff --no-ext-diff --no-textconv "$FROM" "$SHA" -- tools .github .gitattributes .gitmodules
+G --no-pager diff --no-ext-diff --no-textconv --text "$FROM" "$SHA" -- tools .github .gitattributes .gitmodules | LC_ALL=C cat -v
 say ""
 say "Review every commit and file above against the security review in CONTRIBUTING.md."
 printf 'Type %s to confirm you reviewed them: ' "$V"

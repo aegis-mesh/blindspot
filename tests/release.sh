@@ -118,6 +118,23 @@ if refused "no '## 1.4.0, <date>' section" nolog; then ok "refuses a version wit
 fresh confirm; rel confirm 1.3 1.3.0
 if refused 'confirmation did not match' confirm && grep -q 'Changes since v1.2.0' "$W/confirm.out" && grep -q 'Notes for 1.3.0' "$W/confirm.out" && grep -q 'CHANGELOG.md *| *[0-9]' "$W/confirm.out"; then ok "lists the changes and refuses a wrong confirmation"; else bad "lists the changes and refuses a wrong confirmation" "exit $RC: $(tail -n 2 "$W/confirm.out")"; fi
 
+# A committed .gitattributes that marks tools/gen.sh -diff, and a commit subject with terminal
+# control bytes, change nothing in what the review shows.
+fresh shown; printf 'tools/gen.sh -diff\n' >> "$W/shown/.gitattributes"; printf ': hidden-from-the-review\n' >> "$W/shown/tools/gen.sh"
+recommit shown "$(printf 'Tidy gen.sh\033[2K\033[1A\033[2K\rNothing to see')"; rel shown 1.3 1.3.0
+if refused 'confirmation did not match' shown && grep -q '^+: hidden-from-the-review$' "$W/shown.out" && ! grep -q 'Binary files' "$W/shown.out"
+then ok "shows a change to tools/ in full even when .gitattributes marks it -diff"; else bad "shows a change to tools/ in full even when .gitattributes marks it -diff" "$(grep -a -m 3 -E 'gen.sh|Binary' "$W/shown.out")"; fi
+if ! LC_ALL=C grep -q "$(printf '\033')" "$W/shown.out" && grep -q 'Tidy gen.sh^\[\[2K' "$W/shown.out"
+then ok "shows control bytes in a commit subject as text, never raw"; else bad "shows control bytes in a commit subject as text, never raw" "$(grep -a 'Tidy' "$W/shown.out" | od -c | head -n 2)"; fi
+
+# A file the checkout holds, named like a tool, and a PATH that would run it.
+fresh pathdot; printf '#!/bin/sh\n: > "%s/ran-git"\nexit 1\n' "$W" > "$W/pathdot/git"; chmod +x "$W/pathdot/git"
+git -C "$W/pathdot" add git; recommit pathdot "A git in the checkout"; rm -f "$W/ran-git"
+(cd "$W/pathdot" && printf 'no\n' | TMPDIR="$W/tmp" PATH=".:$W/bin:$PATH" BLINDSPOT_SIGNING_KEY="$W/key" "$RB" tools/release.sh --dry-run 1.3.0) > "$W/pathdot.out" 2>&1; RC=$?
+if [ "$RC" -ne 0 ] && grep -q 'PATH holds the relative folder \.' "$W/pathdot.out" && [ ! -e "$W/ran-git" ]; then ok "refuses a relative folder on PATH before running any tool"; else bad "refuses a relative folder on PATH before running any tool" "exit $RC, the checkout's git ran: $([ -e "$W/ran-git" ] && echo yes || echo no): $(tail -n 1 "$W/pathdot.out")"; fi
+(cd "$W/pathdot" && printf 'no\n' | TMPDIR="$W/tmp" PATH="$W/pathdot:$W/bin:$PATH" BLINDSPOT_SIGNING_KEY="$W/key" "$RB" tools/release.sh --dry-run 1.3.0) > "$W/pathdot.out" 2>&1; RC=$?
+if [ "$RC" -ne 0 ] && grep -q 'inside the repository' "$W/pathdot.out" && [ ! -e "$W/ran-git" ]; then ok "refuses a folder of the checkout on PATH before running any tool"; else bad "refuses a folder of the checkout on PATH before running any tool" "exit $RC, the checkout's git ran: $([ -e "$W/ran-git" ] && echo yes || echo no): $(tail -n 1 "$W/pathdot.out")"; fi
+
 needgen; fresh stranger; KEY=$W/other rel stranger 1.3.0 1.3.0
 if refused 'does not verify against' stranger; then ok "refuses a key not in allowed_signers"; else bad "refuses a key not in allowed_signers" "exit $RC: $(tail -n 2 "$W/stranger.out")"; fi
 endgen

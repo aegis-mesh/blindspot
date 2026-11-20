@@ -42,14 +42,17 @@ review, like every file here.
 
 `tools/release.sh <version>` does every step, and publishes nothing until all of them pass.
 
-1. It checks that it runs on a clean checkout at the tip of `origin/main`, that the version is higher
-   than every existing release, and that `CHANGELOG.md` has a section for it. It runs nothing from the
-   checkout until step 2 is confirmed.
+1. It checks that no folder on `PATH` is relative or inside the checkout, before it runs any
+   program, so a file the checkout holds can't run in place of `git` or another tool. It checks that
+   it runs on a clean checkout at the tip of `origin/main`, that the version is higher than every
+   existing release, and that `CHANGELOG.md` has a section for it. It runs nothing from the checkout
+   until step 2 is confirmed.
 2. It lists every commit and changed file since the previous release, and asks the maintainer to type
    the version to confirm they reviewed that range against the
    [security review](../../CONTRIBUTING.md#security-review), with the changes to `tools/`, `.github/`
-   and `.gitattributes` in full. A release is the second look at everything merged since the last
-   one. Then, in a copy of the reviewed commit made with `git archive` and checked file by file
+   and `.gitattributes` in full. Every listing is shown as text whatever `.gitattributes` says, with
+   control bytes made visible, so neither a commit subject nor a changed line can hide or redraw
+   what is shown. A release is the second look at everything merged since the last one. Then, in a copy of the reviewed commit made with `git archive` and checked file by file
    against the commit, it runs `bash tools/gen.sh --check` and `bash tools/gen.sh`. It stops if either fails, if a listed file is missing or empty,
    if a committed file changed, or if `gen.sh` made a file the list does not name as built.
 3. It writes `SHA256SUMS`, one line per listed file in name order, and signs it with the key at `BLINDSPOT_SIGNING_KEY`. `ssh-keygen` asks for
