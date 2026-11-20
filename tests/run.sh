@@ -5552,9 +5552,9 @@ GIRD_CHECK_FLEET_ROOT=1 GIRD_CHECK_FLEET_USERS="$FL/users.tsv" GIRD_CHECK_FLEET_
 chmod 700 "$FL/ro"
 if [ "$RC" -eq 13 ] && grep -qE '^blindspot failed accounts=4 .* owasp=ASI03:2,ASI04:1,ASI05:1;counted:3;not_counted:1;partial:1$' "$FL/owro.out" && [ ! -e "$FL/ro/state" ]
 then ok "fleet: a failed save keeps the owasp part in the summary line"; else bad "fleet: a failed save keeps the owasp part in the summary line" "exit $RC $(cat "$FL/owro.out")"; fi
-fl_run owh --json --hash-accounts=owasp-secret
+fl_hashkey owasp-secret; fl_run owh --json; rm -f "$FL/state/hash-key"
 if grep -qE '^[0-9a-f]{16}\.owasp=ASI03 ASI04 ASI05$' "$FL/owh.flat" && grep -q '^owasp\.accounts_counted=3$' "$FL/owh.flat" && ! grep -q 'asha' "$FL/owh.out"
-then ok "fleet: --json and --hash-accounts carry the owasp object and each row's tags"; else bad "fleet: --json and --hash-accounts carry the owasp object and each row's tags" "$(grep -E 'owasp' "$FL/owh.flat" | tr '\n' ' ')"; fi
+then ok "fleet: --json and a hash-key carry the owasp object and each row's tags"; else bad "fleet: --json and a hash-key carry the owasp object and each row's tags" "$(grep -E 'owasp' "$FL/owh.flat" | tr '\n' ' ')"; fi
 # An update-level incident alone: a version to update, never malware signs.
 mkdir -p "$FL/mis/code/m" "$FL/mis/Library/Safari"
 printf '{"lockfileVersion":3,"packages":{"node_modules/@mistralai/mistralai":{"version":"2.2.2","resolved":"https://registry.npmjs.org/@mistralai/mistralai/-/mistralai-2.2.2.tgz"}}}\n' > "$FL/mis/code/m/package-lock.json"

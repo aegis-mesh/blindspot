@@ -419,7 +419,7 @@ fleet: the terminal block comes before where the result was saved	gird-fleet.ps1
 fleet: the summary line ends with the owasp part, its counts included	gird-fleet.ps1 does not work out OWASP risks yet: Windows fleet mode waits for them (docs/designs/owasp.md, Windows)
 fleet: a long inventory value has no owasp token and ends with +more	gird-fleet.ps1 does not work out OWASP risks yet: Windows fleet mode waits for them (docs/designs/owasp.md, Windows)
 fleet: a failed save keeps the owasp part in the summary line	gird-fleet.ps1 does not work out OWASP risks yet: Windows fleet mode waits for them (docs/designs/owasp.md, Windows)
-fleet: --json and --hash-accounts carry the owasp object and each row's tags	gird-fleet.ps1 does not work out OWASP risks yet: Windows fleet mode waits for them (docs/designs/owasp.md, Windows)
+fleet: --json and a hash-key carry the owasp object and each row's tags	gird-fleet.ps1 does not work out OWASP risks yet: Windows fleet mode waits for them (docs/designs/owasp.md, Windows)
 fleet: an update-level incident is labelled versions to update, not malware signs	gird-fleet.ps1 does not work out OWASP risks yet: Windows fleet mode waits for them (docs/designs/owasp.md, Windows)
 fleet: the inventory value ends with the owasp token when it fits, and --inventory reads it back	gird-fleet.ps1 does not work out OWASP risks yet: Windows fleet mode waits for them (docs/designs/owasp.md, Windows)
 fleet: each risk in the inventory value carries its own owasp. prefix	gird-fleet.ps1 does not work out OWASP risks yet: Windows fleet mode waits for them (docs/designs/owasp.md, Windows)
