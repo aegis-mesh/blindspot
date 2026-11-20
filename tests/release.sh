@@ -50,6 +50,13 @@ ssh-keygen -q -t ed25519 -N '' -C release-test -f "$W/key" < /dev/null
 ssh-keygen -q -t ed25519 -N '' -C other-test -f "$W/other" < /dev/null
 SIGNERLINE="release@blindspot namespaces=\"git,blindspot-release\" $(cat "$W/key.pub")"
 
+# This repository's CHANGELOG as it stood at 1.2.0, less its first line: a section for a later
+# release is left out, so the fixture's own 1.3.0 notes are its only ones once this repository has
+# released 1.3.0 or later itself.
+cl_120() {
+  awk 'NR == 1 { next } /^## [0-9]+\.[0-9]+\.[0-9]+,/ { split($2, v, "."); v[3] += 0
+    drop = v[1] > 1 || (v[1] == 1 && v[2] > 2) || (v[1] == 1 && v[2] == 2 && v[3] > 0) } !drop' "$SRC/CHANGELOG.md"
+}
 # fresh NAME [nokey]: a repository at $W/NAME with an origin at $W/NAME.git, a v1.2.0 release and
 # one commit since, which adds the 1.3.0 notes. It holds every file this repository's
 # .github/release-files names as committed, and what tools/gen.sh reads to build the rest.
@@ -61,12 +68,12 @@ fresh() {
   cp "$SRC/tools/gen.sh" "$SRC/tools/release.sh" "$SRC/tools/strip-comments.ps1" "$R/tools/"
   cp "$SRC/.github/allowed_signers" "$SRC/.github/release-files" "$R/.github/"
   [ "${2:-}" = nokey ] || printf '%s\n' "$SIGNERLINE" >> "$R/.github/allowed_signers"
-  cp "$SRC/CHANGELOG.md" "$R/"
+  { head -n 1 "$SRC/CHANGELOG.md"; cl_120; } > "$R/CHANGELOG.md"
   git -C "$R" init -q
   git -C "$R" add -A
   git -C "$R" commit -q -m one
   git -C "$R" tag -a v1.2.0 -m "Blindspot 1.2.0"
-  { printf '# Changelog\n\n## 1.3.0, 19 November 2026\n\n- A change for the tests.\n- And a second one.\n\n'; sed 1d "$SRC/CHANGELOG.md"; } > "$R/CHANGELOG.md"
+  { printf '# Changelog\n\n## 1.3.0, 19 November 2026\n\n- A change for the tests.\n- And a second one.\n\n'; cl_120; } > "$R/CHANGELOG.md"
   git -C "$R" commit -q -am "Notes for 1.3.0"
   git clone -q --bare "$R" "$R.git"
   git -C "$W" config --global url."$R.git".insteadOf "https://github.com/test-owner/$1.git"
@@ -180,7 +187,7 @@ if [ "$RC" -eq 0 ] && [ -e "$W/ran-gen" ]; then ok "runs gen.sh --check once the
 fresh gen; printf '#!/usr/bin/env bash\necho "gird-check.sh is out of date"; exit 1\n' > "$W/gen/tools/gen.sh"; recommit gen "A gen.sh that fails"; rel gen 1.3.0 1.3.0
 if refused 'gen.sh --check failed' gen; then ok "refuses a failing gen.sh --check"; else bad "refuses a failing gen.sh --check" "exit $RC: $(tail -n 2 "$W/gen.out")"; fi
 
-fresh empty; { printf '# Changelog\n\n## 1.3.0, 19 November 2026\n\n'; sed 1d "$SRC/CHANGELOG.md"; } > "$W/empty/CHANGELOG.md"; recommit empty "An empty 1.3.0 section"; rel empty 1.3.0 1.3.0
+fresh empty; { printf '# Changelog\n\n## 1.3.0, 19 November 2026\n\n'; cl_120; } > "$W/empty/CHANGELOG.md"; recommit empty "An empty 1.3.0 section"; rel empty 1.3.0 1.3.0
 if refused 'section is empty' empty; then ok "refuses an empty CHANGELOG section"; else bad "refuses an empty CHANGELOG section" "exit $RC: $(tail -n 2 "$W/empty.out")"; fi
 
 echo "release tool: the list of released files"

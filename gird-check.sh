@@ -340,7 +340,7 @@ banner() {
   done <<EOF
 $_wm
 EOF
-  emit "  ${TEAL}    ⠐⠛⠿⠿⠛⠃    ${RST}   ${B}BLINDSPOT${RST}  ${DIM}v1.2.0 · 25 Oct 2026 · gird.ai/blindspot${RST}"
+  emit "  ${TEAL}    ⠐⠛⠿⠿⠛⠃    ${RST}   ${B}BLINDSPOT${RST}  ${DIM}v1.3.0 · 20 Nov 2026 · gird.ai/blindspot${RST}"
   blank
   emit "  ${DIM}Read-only. Prints paths and counts, never a key.${RST}"
   if [ "$OFFLINE" -eq 0 ]; then
