@@ -2338,11 +2338,12 @@ start_cmd() { # script-ERE prefix-ERE [cd]: five expressions, one per line, and 
   _wb='([^{}]|\{[^{}]*\})*'
   printf '%s\n%s\n%s\n%s\n%s' "$_ws$_wx$_wp${_wn}[[:space:]]+($_wo)*(run[[:space:]]+($_wo)*)?$_wf" "$_ws$_wx$_wf" "$_wi$_wb$_wa" "$_wa$_wb$_wi" \
     "$_ws$_wx"'cat[[:space:]]+(\\"|'"'"')?'"$2$1"'(\\"|'"'"')?[[:space:]]*\|[[:space:]]*'"$_wp"'(sh|bash|zsh)(\.exe)?([[:space:];&|)"'"'"']|\\)'
-  # A cd into the folder (quoted or not, after cd -L or -P), then && or ; and an interpreter or a ./
-  # script, which run a file from there: a cd followed by rm or ls runs nothing. The words of cmd_wrap
-  # come before the cd only: with them after it too, macOS's grep -o crashed now and then.
+  # A cd into the folder (quoted or not, after cd -L or -P), then && or ; and an interpreter, npx or a
+  # package manager, or a ./ script, which run a file from there, after at most one of nohup, exec or
+  # setsid: a cd followed by rm or ls runs nothing. The words of cmd_wrap come before the cd only: with
+  # them after it too, macOS's grep -o crashed now and then.
   if [ "${3:-}" = cd ]; then
-    printf '\n%s' "$_ws$_wx"'cd[[:space:]]+(-[LP][[:space:]]+)?(\\"|'"'"')?'"$2$1"'(\\"|'"'"')?[[:space:]]*(&&|;)[[:space:]]*('"$_wp$_wn"'[[:space:]]|\.[/\\])'
+    printf '\n%s' "$_ws$_wx"'cd[[:space:]]+(-[LP][[:space:]]+)?(\\"|'"'"')?'"$2$1"'(\\"|'"'"')?[[:space:]]*(&&|;)[[:space:]]*((nohup|exec|setsid)[[:space:]]+)?('"$_wp"'('"$_wn"'|(npx|npm|pnpm|yarn)(\.cmd|\.exe)?)[[:space:]]|\.[/\\])'
   fi
 }
 # One expression per line, each given to grep alone: macOS's grep can crash on them all joined by |.

@@ -1875,8 +1875,9 @@ A project whose workflows (`.github/workflows/*.yml` and `*.yaml`) use one of th
   that runs a file from `.claude/package` or `.codex/package`, where the AntV wave copies its payload
   (SafeDep), even after that copy is gone. It counts when it runs that file the way a project's hook
   runs a script, or when it changes into that folder with `cd` and then runs a script there (with an
-  interpreter, or as `./` and its name), so a guard that only tests for the file, or a command that
-  deletes the folder or lists it, does not. A `config.toml` whose SessionStart command is written over
+  interpreter, `npx` or a package manager such as `npm start`, or as `./` and its name, also after one
+  of `nohup`, `exec` or `setsid`), so a guard that only tests for the file, or a command that deletes
+  the folder or lists it, does not. A `config.toml` whose SessionStart command is written over
   several lines (`"""` or `'''`) is named as not read in full.
 - A project's `.vscode/settings.json` that sets the old `chat.tools.autoApprove`, the setting the
   CVE-2025-53773 attack wrote, is listed too. VS Code 1.104 and later ignore it, so it is a sign to

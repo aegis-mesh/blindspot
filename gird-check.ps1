@@ -1683,10 +1683,11 @@ function Start-Cmd([string]$path, [string]$pre, [switch]$cd) {
   $cb = '([^{}]|\{[^{}]*\})*'
   $rx = $cs + $cp + $cn + '\s+(' + $co + ')*(run\s+(' + $co + ')*)?' + $cf + '|' + $cs + $cf + '|' + $ci + $cb + $ca + '|' + $ca + $cb + $ci +
     '|' + $cs + 'cat\s+(\\"|'')?' + $pre + $path + '(\\"|'')?\s*\|\s*' + $cp + '(sh|bash|zsh)(\.exe)?([\s;&|)"'']|\\)'
-  # A cd into the folder (quoted or not, after cd -L or -P), then && or ; and an interpreter or a ./
-  # script, which run a file from there: a cd followed by rm or ls runs nothing. Cmd-Wrap's words come
-  # before the cd only, as in gird-check.sh.
-  if ($cd) { $rx += '|' + $cs + 'cd\s+(-[LP]\s+)?(\\"|'')?' + $pre + $path + '(\\"|'')?\s*(&&|;)\s*(' + $cp + $cn + '\s|\.[/\\])' }
+  # A cd into the folder (quoted or not, after cd -L or -P), then && or ; and an interpreter, npx or a
+  # package manager, or a ./ script, which run a file from there, after at most one of nohup, exec or
+  # setsid: a cd followed by rm or ls runs nothing. Cmd-Wrap's words come before the cd only, as in
+  # gird-check.sh.
+  if ($cd) { $rx += '|' + $cs + 'cd\s+(-[LP]\s+)?(\\"|'')?' + $pre + $path + '(\\"|'')?\s*(&&|;)\s*((nohup|exec|setsid)\s+)?(' + $cp + '(' + $cn + '|(npx|npm|pnpm|yarn)(\.cmd|\.exe)?)\s|\.[/\\])' }
   New-Object regex($rx, $RxOpt, $RxTimeout)
 }
 $RxStartCmd = Start-Cmd $StartPath '((\\")?\$\{?(CLAUDE_PROJECT_DIR|workspaceFolder)\}?(\\")?[/\\]+|\.[/\\]+)?'
