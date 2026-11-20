@@ -141,6 +141,14 @@ printf 'Hi\363\240\201\201\n' >> README.md
 EOF
 want "a tag character in a README is flagged" 1 '^hidden: README\.md:4:'
 
+kase invis <<'EOF'
+for _c in '\315\217' '\341\240\213' '\341\236\264' '\357\277\271' '\360\235\205\263' '\363\240\277\277' '\357\277\260'; do
+  printf "a${_c}b\n"
+done >> README.md
+EOF
+want "a combining grapheme joiner in a README is flagged" 1 '^hidden: README\.md:4:'
+for _l in 5 6 7 8 9 10; do has "and the default-ignorable character on line $_l" "^hidden: README\.md:$_l:" "$OUT"; done
+
 kase notutf <<'EOF'
 printf 'Bad \377 byte.\n' >> README.md
 EOF

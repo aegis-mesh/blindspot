@@ -79,15 +79,20 @@ finding() { # rule path line text
   printf '%s: %s:%s: %s\n' "$1" "$(vis "$2")" "$3" "$(vis "$4")"
 }
 
-# Byte patterns for UTF-8 characters that are invisible or change text direction: C1 controls, soft
-# hyphen, Arabic letter mark, Mongolian vowel separator, Hangul fillers, zero-width and direction
-# marks, line and paragraph separators, embeddings and overrides, word joiner and isolates,
-# variation selectors, the byte order mark, and tag characters.
+# Byte patterns for UTF-8 characters that are invisible or change text direction: C1 controls;
+# Unicode's Default_Ignorable_Code_Point set (soft hyphen, combining grapheme joiner, Arabic letter
+# mark, Hangul fillers, Khmer inherent vowels, Mongolian variation selectors and vowel separator,
+# zero-width and direction marks, embeddings and overrides, word joiner and isolates, variation
+# selectors, the byte order mark, U+FFF0 to U+FFF8, shorthand format controls, musical symbol
+# beams and slurs, and U+E0000 to U+E0FFF: tags and more variation selectors); and line and
+# paragraph separators and the interlinear annotation marks (U+FFF9 to U+FFFB).
 o() { printf "$1"; }
-BAD_UTF8="$(o '\302')[$(o '\200')-$(o '\237')$(o '\255')]|$(o '\330\234')|$(o '\341\240\216')"
-BAD_UTF8="$BAD_UTF8|$(o '\341\205')[$(o '\237\240')]|$(o '\343\205\244')|$(o '\357\276\240')"
+BAD_UTF8="$(o '\302')[$(o '\200')-$(o '\237')$(o '\255')]|$(o '\315\217')|$(o '\330\234')"
+BAD_UTF8="$BAD_UTF8|$(o '\341\205')[$(o '\237\240')]|$(o '\341\236')[$(o '\264\265')]|$(o '\341\240')[$(o '\213')-$(o '\217')]"
+BAD_UTF8="$BAD_UTF8|$(o '\343\205\244')|$(o '\357\276\240')"
 BAD_UTF8="$BAD_UTF8|$(o '\342\200')[$(o '\213')-$(o '\217')$(o '\250')-$(o '\256')]|$(o '\342\201')[$(o '\240')-$(o '\257')]"
-BAD_UTF8="$BAD_UTF8|$(o '\357\270')[$(o '\200')-$(o '\217')]|$(o '\357\273\277')|$(o '\363\240')[$(o '\200')-$(o '\207')]"
+BAD_UTF8="$BAD_UTF8|$(o '\357\270')[$(o '\200')-$(o '\217')]|$(o '\357\273\277')|$(o '\357\277')[$(o '\260')-$(o '\273')]"
+BAD_UTF8="$BAD_UTF8|$(o '\360\233\262')[$(o '\240')-$(o '\243')]|$(o '\360\235\205')[$(o '\263')-$(o '\272')]|$(o '\363\240')[$(o '\200')-$(o '\277')]"
 
 B='(^|[^A-Za-z0-9_-])'   # word start
 E='([^A-Za-z0-9_-]|$)'   # word end
