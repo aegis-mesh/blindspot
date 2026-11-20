@@ -1,5 +1,5 @@
 <#
-Blindspot, the GIRD AI key check, for Windows PowerShell, version 1.2.0 (25 October 2026)
+Blindspot, the GIRD AI key check, for Windows PowerShell, version 1.3.0 (20 November 2026)
 https://gird.ai/blindspot
 
 Shows the AI coding agents and MCP servers on this computer, AI and cloud keys
