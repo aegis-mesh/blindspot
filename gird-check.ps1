@@ -9084,7 +9084,7 @@ $UpdSum = ''
 foreach ($t in $NpmTags) { if ((Incident-Level $t) -ne 'update') { continue }; $us = Incident-Summary $t; if ($us) { $UpdSum = $us; break } }
 if ($N_OLD -gt 0) { $G1 = "$cYel!$cRst"; $D1 = "$N_AG found, $(Plural $N_OLD 'security fix' 'security fixes') to install" }
 elseif ($N_YOLO -gt 0) { $G1 = "$cYel!$cRst"; $D1 = "$N_AG found, $N_YOLO_AG set to run commands without asking" }
-elseif ($N_REMOTE -gt 0) { $G1 = "$cYel!$cRst"; $D1 = "$N_AG found, $N_REMOTE_AG allowed to run commands on other machines" }
+elseif ($N_REMOTE -gt 0) { $G1 = "$cYel!$cRst"; $D1 = "$N_AG found, rules let $(Plural $N_REMOTE_AG 'agent' 'agents') run commands on other machines" }
 elseif ($N_AG -eq 0) { $G1 = "$cDim$gMid$cRst"; $D1 = 'none found' }
 elseif ($N_IDLE -gt 0) { $G1 = "$cYel$gRing$cRst"; $D1 = "$N_AG found, $N_IDLE idle: $(First-Names $IdleNames 2)" }
 else { $G1 = "$cGrn$gOk$cRst"; $D1 = "$N_AG found, all used in the last 30 days" }

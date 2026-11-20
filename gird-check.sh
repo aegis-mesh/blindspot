@@ -10370,7 +10370,7 @@ for _t in $NPM_TAGS; do
 done
 if [ "$N_OLD" -gt 0 ]; then G1="${YEL}!${RST}"; D1="$N_AG found, $(plural "$N_OLD" "security fix" "security fixes") to install"
 elif [ "$N_YOLO" -gt 0 ]; then G1="${YEL}!${RST}"; D1="$N_AG found, $N_YOLO_AG set to run commands without asking"
-elif [ "$N_REMOTE" -gt 0 ]; then G1="${YEL}!${RST}"; D1="$N_AG found, $N_REMOTE_AG allowed to run commands on other machines"
+elif [ "$N_REMOTE" -gt 0 ]; then G1="${YEL}!${RST}"; D1="$N_AG found, rules let $(plural "$N_REMOTE_AG" agent agents) run commands on other machines"
 elif [ "$N_AG" -eq 0 ]; then G1="${DIM}·${RST}"; D1="none found"
 elif [ "$N_IDLE" -gt 0 ]; then G1="${YEL}○${RST}"; D1="$N_AG found, $N_IDLE idle: $(first_names "$IDLE_NAMES" 2)"
 else G1="${GRN}✓${RST}"; D1="$N_AG found, all used in the last 30 days"; fi

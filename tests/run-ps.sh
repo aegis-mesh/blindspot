@@ -3174,7 +3174,7 @@ has    "remote commands: the fix says to remove the rules or ask first" 'Remove 
 rm -rf "$WORK/rc1"; cp -R "$WORK/clean" "$WORK/rc1"; mkdir -p "$WORK/rc1/.codex/rules"
 printf 'prefix_rule(pattern=["ssh"])\n' > "$WORK/rc1/.codex/rules/default.rules"
 dzrun "$WORK/rc1" GIRD_CHECK_COMPACT=1 | tr -s ' \n' '  ' > "$WORK/rc1-c.txt"
-has    "remote commands: row 01 counts the agents" 'Coding agents [0-9]+ found, 1 allowed to run commands' "$WORK/rc1-c.txt"
+has    "remote commands: row 01 counts the agents" 'Coding agents [0-9]+ found, rules let 1 agent run commands' "$WORK/rc1-c.txt"
 # A deny or ask rule drops a hit only when nothing narrows it after its wildcard; a rule with no
 # wildcard counts only with more words than the command; an open rule shorter than the command
 # allows every such command.
