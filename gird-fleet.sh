@@ -1175,8 +1175,9 @@ fl_inventory() {
 # characters, in the order the report reads it: the accounts, the Mac's own row, old-install, then no
 # accounts. Too long, it keeps old-install and no accounts, and chooses the rest by need: act, then
 # not_checked, then review, then as many clear ones as fit, the Mac's row before an account at the same
-# level. Details go before rows: an act account keeps gh-token-monitor and its incidents, the Mac's row
-# drops its last parts first. It ends with +more whenever anything was cut; the saved file has the rest.
+# level. Details go before rows: every row that fits gets its outcome first, then, by need, an act
+# account its gh-token-monitor and incidents, then each row as much of the rest as fits (the Mac's row
+# drops its last parts first). It ends with +more whenever anything was cut; the saved file has the rest.
 fl_value() { # head parts accounts [token]: parts each start with " | "; accounts 0 adds " | no accounts"
   # The OWASP token goes last, and only when the whole value fits with it, so it never costs an
   # account any of its content; a cut value has no token.
@@ -1199,15 +1200,18 @@ fl_value() { # head parts accounts [token]: parts each start with " | "; account
           if (cand[n, c] != base) cand[n, ++c] = base
           nc[n] = c
         }
-        room = 243 - length(head) - length(tail); cut = 0; stop = 0; acc = ""; mrow = ""
-        for (lv = 5; lv >= 0 && !stop; lv--) for (pass = 1; pass >= 0 && !stop; pass--) for (j = 1; j <= n && !stop; j++) if (k[j] == lv && mach[j] == pass) {
-          got = 0
-          for (c = 1; c <= nc[j]; c++) if (length(cand[j, c]) + 3 <= room) { got = c; break }
-          if (got == 0) { cut = 1; stop = 1; continue }
-          if (got > 1) cut = 1
-          room -= length(cand[j, got]) + 3
-          if (mach[j]) mrow = " | " cand[j, got]; else acc = acc " | " cand[j, got]
-        }
+        room = 243 - length(head) - length(tail); cut = 0; acc = ""; mrow = ""
+        # The order rows are kept in: by need, the row of the Mac before an account at the same level.
+        no = 0; for (lv = 5; lv >= 0; lv--) for (pass = 1; pass >= 0; pass--) for (j = 1; j <= n; j++) if (k[j] == lv && mach[j] == pass) ord[++no] = j
+        # Rows before details: every row its shortest form, in that order, while there is room.
+        kept = 0
+        for (i = 1; i <= no; i++) { j = ord[i]; if (length(cand[j, nc[j]]) + 3 > room) break; got[j] = nc[j]; room -= length(cand[j, nc[j]]) + 3; kept = i }
+        if (kept < no) cut = 1
+        # Then details, in the same order: first each act account with gh-token-monitor and its incidents
+        # (its key form, the candidate before its bare outcome), then each row the longest form that fits.
+        for (i = 1; i <= kept; i++) { j = ord[i]; if (!mach[j] && k[j] == 4 && nc[j] > 2) { c = nc[j] - 1; dl = length(cand[j, c]) - length(cand[j, got[j]]); if (dl <= room) { room -= dl; got[j] = c } } }
+        for (i = 1; i <= kept; i++) { j = ord[i]; for (c = 1; c < got[j]; c++) { dl = length(cand[j, c]) - length(cand[j, got[j]]); if (dl <= room) { room -= dl; got[j] = c; break } } }
+        for (i = 1; i <= kept; i++) { j = ord[i]; if (got[j] > 1) cut = 1; if (mach[j]) mrow = " | " cand[j, got[j]]; else acc = acc " | " cand[j, got[j]] }
         print head acc mrow tail (cut ? " +more" : "") }'
 }
 

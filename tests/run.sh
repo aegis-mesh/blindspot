@@ -6023,6 +6023,13 @@ IV_250="$IV_P$(printf 'x%.0s' $(seq 1 $((250 - ${#IV_HEAD} - ${#IV_P}))))"
 IV_OUT=$(/bin/bash -c '. "$1"; fl_value "$2" "$3" 1 "$4"' _ "$FL/invfit.sh" "$IV_HEAD" "$IV_250" "")
 if [ "$IV_OUT" = "$IV_HEAD$IV_250" ]; then ok "fleet: an inventory value of 250 characters with no token is kept whole"
 else bad "fleet: an inventory value of 250 characters with no token is kept whole" "$IV_OUT"; fi
+# A cut keeps every row that needs attention before any row's details: an act account's long details
+# give way to a not_checked account and the Mac's own row, never the other way round.
+IV_P2=" | asha: act incidents tanstack; keys 9 anthropic,openai,google,openrouter,groq,xai,huggingface,perplexity,replicate,aws,github,npm,databricks,gitlab,slack; ssh-open 2; update-tools claude-code,codex,cursor; on-open 3 | ravi: not_checked time_limit | machine: review; possible litellm"
+IV_OUT=$(/bin/bash -c '. "$1"; fl_value "$2" "$3" 2 ""' _ "$FL/invfit.sh" "v1 act 2026-10-25T09:12Z" "$IV_P2")
+if [ "$IV_OUT" = "v1 act 2026-10-25T09:12Z | asha: act incidents tanstack | ravi: not_checked time_limit | machine: review; possible litellm +more" ]
+then ok "fleet: a cut inventory value keeps every account that needs attention before any account's details"
+else bad "fleet: a cut inventory value keeps every account that needs attention before any account's details" "$IV_OUT"; fi
 # Installed as the guide says: gird-fleet.sh readable by root only (0700), gird-check.sh 0755.
 users "asha:$U:$FL/asha:/bin/zsh" "itadmin:$U:$FL/itadmin:/bin/zsh"
 mkdir -p "$FL/inst700"; cp "$SCRIPT" "$FLEETSH" "$FL/inst700/"; chmod 755 "$FL/inst700/gird-check.sh"; chmod 700 "$FL/inst700/gird-fleet.sh"

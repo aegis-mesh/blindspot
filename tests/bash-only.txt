@@ -441,3 +441,4 @@ tools/review-guard.sh passes its tests	the review guard checks pull requests to 
 tools/release.sh refuses what it must and signs what it releases	tools/release.sh is one bash tool maintainers run on macOS or Linux to cut a release; it does not touch gird-check.ps1
 fleet: zsh's ZDOTDIR files and fish's conf.d are read like the profiles, and a ZDOTDIR that can't be told counts	Windows ships neither zsh nor fish: gird-check.ps1 -AccountRun reads PowerShell's profiles, tested by its own moved-folder twins
 fleet: a hash-key in a folder that is not root's alone stops every run, and the folder is never moved aside	gird-fleet.ps1 has no hash-key: Windows checks the signed-in account only, whose name the MDM already shows
+fleet: a cut inventory value keeps every account that needs attention before any account's details	it cuts gird-fleet.sh's value across accounts; Windows checks one account, so its value has no rows to choose between
