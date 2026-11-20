@@ -10217,7 +10217,11 @@ elif [ "$EXT_UNREAD" -gt 0 ]; then
 elif [ "$SSHK_UNREAD" -eq 1 ]; then
   pair "${YEL}!${RST}" "Editor extensions" 16 "${YEL}not fully checked: ~/.ssh/authorized_keys could not be read${RST}"
 else
-  pair "${GRN}✓${RST}" "Editor extensions" 16 "none of $(printf '%s\n' "$BAD_EXT" | awk '$2 != "*"' | grep -c .) bad versions or $(printf '%s\n' "$BAD_EXT" | awk '$2 == "*"' | grep -c .) bad extensions"
+  # A startup file of an extension incident (~/.config/.smt) is looked for by its path: under a folder
+  # in the home that could not be read, whether it is there can't be told, as the Python rows say.
+  _xnone="none of $(printf '%s\n' "$BAD_EXT" | awk '$2 != "*"' | grep -c .) bad versions or $(printf '%s\n' "$BAD_EXT" | awk '$2 == "*"' | grep -c .) bad extensions"
+  if [ "$HOME_PARTIAL" -eq 1 ]; then pair "${YEL}!${RST}" "Editor extensions" 16 "$_xnone, but some folders in your home were not read"
+  else pair "${GRN}✓${RST}" "Editor extensions" 16 "$_xnone"; fi
   wrap "checked the extension folders of VS Code, Cursor, Windsurf, Devin Desktop, VSCodium, Kiro, Antigravity and Positron, and ~/.ssh/authorized_keys for an SSH key such malware adds" 26 "                          " "                          " "$DIM"
 fi
 # With findings above, a folder that could not be read still has to be said.

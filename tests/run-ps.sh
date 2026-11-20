@@ -2686,6 +2686,12 @@ dzrun "$WORK/dz-cxkb" | tr -s ' \n' '  ' > "$WORK/dz-cxkb.txt"
 has    "a pipe at authorized_keys does not hold up the check" 'Your AI Exposure Check' "$WORK/dz-cxkp.txt"
 has    "and is not fully checked"                       'Editor extensions not fully checked: ~/\.ssh/authorized_keys could not be read' "$WORK/dz-cxkp.txt"
 has    "an authorized_keys over 16 MiB is not fully checked" 'Editor extensions not fully checked: ~/\.ssh/authorized_keys could not be read' "$WORK/dz-cxkb.txt"
+# The extension's startup files are looked for by their paths: with ~/.config closed, whether .smt is
+# there can't be told, so the row is not green.
+rm -rf "$WORK/dz-cxkc"; cp -R "$WORK/dz-cxku" "$WORK/dz-cxkc"; rm -f "$WORK/dz-cxkc/.ssh/authorized_keys"
+mkdir -p "$WORK/dz-cxkc/.config"; : > "$WORK/dz-cxkc/.config/.smt"; chmod 000 "$WORK/dz-cxkc/.config"
+dzrun "$WORK/dz-cxkc" | tr -s ' \n' '  ' > "$WORK/dz-cxkc.txt"; chmod 755 "$WORK/dz-cxkc/.config"
+has    "with a home folder not read, the extensions row says so" '! Editor extensions none of [0-9]+ bad versions or [0-9]+ bad extensions, but some folders in your home were not read' "$WORK/dz-cxkc.txt"
 # GlassWorm's LaunchAgent next to another incident's extension (Nx Console) is a file to check, not
 # GlassWorm's sign: people name their own LaunchAgents that way.
 rm -rf "$WORK/dz-nxgw"; cp -R "$WORK/dz-nx" "$WORK/dz-nxgw"; mkdir -p "$WORK/dz-nxgw/Library/LaunchAgents"; : > "$WORK/dz-nxgw/Library/LaunchAgents/com.user.nodestart.plist"
