@@ -93,10 +93,13 @@ owned_only() {
 # <<< owned-walk
 
 # The saved result's folder: root's, mode 0700. One that is a link, not a folder, or not root's with
-# mode 0700 is moved aside and made again.
+# mode 0700 is moved aside and made again, unless it holds a hash-key: moved aside, the next run would
+# find no hash-key and show the names it is there to hide. That folder stays as it is, nothing is
+# written to it, and every run that needs it is refused until an admin makes it root's with mode 0700.
 fl_state_ok() { [ ! -L "$FL_STATE" ] && [ -d "$FL_STATE" ] && [ "$(fl_um "$FL_STATE")" = "$FL_OWNER 700" ]; }
 fl_state_prep() {
   if ! fl_state_ok; then
+    { [ -L "$FL_STATE/hash-key" ] || [ -e "$FL_STATE/hash-key" ]; } && return 1
     if [ -L "$FL_STATE" ] || [ -e "$FL_STATE" ]; then
       /bin/mv -f -- "$FL_STATE" "$FL_STATE.replaced-$(/bin/date -u +%Y%m%d%H%M%S)-$$" 2>/dev/null || return 1
     fi
@@ -1147,7 +1150,13 @@ fl_refused() { # epoch of the last finished run, 0 for none: prints "failed" and
 }
 fl_inventory() {
   _f="$FL_STATE/last.json"
-  if [ ! -L "$_f" ] && [ ! -e "$_f" ]; then fl_state_ok && { fl_refused 0 || fl_unfinished 0; } && return 0; fl_inv_out none; return 0; fi
+  if [ ! -L "$_f" ] && [ ! -e "$_f" ]; then
+    fl_state_ok && { fl_refused 0 || fl_unfinished 0; } && return 0
+    # A folder kept in place for its hash-key (fl_state_prep) could not record why its runs were
+    # refused: never none.
+    if ! fl_state_ok && { [ -L "$FL_STATE/hash-key" ] || [ -e "$FL_STATE/hash-key" ]; }; then fl_inv_out unreadable; else fl_inv_out none; fi
+    return 0
+  fi
   if ! fl_state_ok || [ -L "$_f" ] || [ ! -f "$_f" ] || [ "$(fl_um "$_f" 2>/dev/null)" != "$FL_OWNER 600" ]; then fl_inv_out unreadable; return 0; fi
   _ep=$(/usr/bin/sed -n 's/^  "checked_epoch": \([0-9]\{1,12\}\),$/\1/p' "$_f" | /usr/bin/head -n 1)
   _iv=$(/usr/bin/sed -n 's/^  "inventory": "\([A-Za-z0-9 ._:;,|+-]*\)",$/\1/p' "$_f" | /usr/bin/head -n 1)

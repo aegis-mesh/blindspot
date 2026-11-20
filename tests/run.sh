@@ -5415,6 +5415,16 @@ rm -f "$FL/state/hash-key"
 if grep -qE '^[0-9a-f]{16}\.outcome=act$' "$FL/hash1.flat" && ! grep -q 'asha' "$FL/state/last.json" && [ "$(grep -cE '^[0-9a-f]{16}\.outcome=' "$FL/hash1.flat")" -eq 2 ] \
    && [ "$(grep -E '^[0-9a-f]{16}\.outcome=act$' "$FL/hash1.flat")" != "$(grep -E '^[0-9a-f]{16}\.outcome=act$' "$FL/hash2.flat")" ]
 then ok "fleet: a hash-key file root placed shows a keyed hash, never the name"; else bad "fleet: a hash-key file root placed shows a keyed hash, never the name" "$(grep outcome "$FL/hash1.flat" "$FL/hash2.flat")"; fi
+# A hash-key in a saved-result folder that is not root's with mode 0700: the run is refused, and the
+# folder is never moved aside, since a run after that would find no hash-key and save the names in clear.
+fl_hashkey hk-secret; chmod 755 "$FL/state"; rm -f "$FL/state/last.json"; _hkr=$(find "$FL" -maxdepth 1 -name 'state.replaced-*' | grep -c .)
+fl_run hk755a --json; fl_run hk755b --json
+GIRD_CHECK_FLEET_ROOT=1 GIRD_CHECK_FLEET_STATE="$FL/state" "${FLBASH[@]}" "$FLEETSH" --inventory > "$FL/hk755-inv.out" 2>&1 < /dev/null
+if [ "$(cat "$FL/hk755a.rc")" = 13 ] && [ "$(cat "$FL/hk755b.rc")" = 13 ] && [ -f "$FL/state/hash-key" ] && [ ! -e "$FL/state/last.json" ] \
+   && [ "$(find "$FL" -maxdepth 1 -name 'state.replaced-*' | grep -c .)" -eq "$_hkr" ] && ! grep -qE 'asha|itadmin' "$FL/hk755a.out" "$FL/hk755b.out" && grep -qx 'unreadable' "$FL/hk755-inv.out"
+then ok "fleet: a hash-key in a folder that is not root's alone stops every run, and the folder is never moved aside"
+else bad "fleet: a hash-key in a folder that is not root's alone stops every run, and the folder is never moved aside" "rc $(cat "$FL/hk755a.rc") $(cat "$FL/hk755b.rc"); inv $(cat "$FL/hk755-inv.out"); replaced $(find "$FL" -maxdepth 1 -name 'state.replaced-*' | grep -c .) of $_hkr"; fi
+chmod 700 "$FL/state"; rm -f "$FL/state/hash-key"
 
 # Possible signs, and the account's own temp folder (tests/fleet-launch.sh hands each account run
 # $FL/usertmp-<account> as the one macOS would give it).
