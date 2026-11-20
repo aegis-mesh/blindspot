@@ -170,11 +170,17 @@ def public_cases(pv):
     for line in open(pv):
         if line.startswith('#') or not line.strip():
             continue
-        i, part, _ = line.rstrip('\n').split('\t')
-        if i == 'azurestorage':
+        i, part, src = line.rstrip('\n').split('\t')
+        if i == 'azurestorage' and 'cosmos-db' in src:
+            # The Cosmos DB emulator's Table connection string, as Microsoft writes it.
+            out.append((i, 'DefaultEndpointsProtocol=http;AccountName=localhost;Account' 'Key=' + part + b64n(86 - len(part)) + '==;TableEndpoint=http://localhost:8902/;'))
+        elif i == 'azurestorage':
             out.append((i, 'DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;Account' 'Key=' + part + b64n(86 - len(part)) + '==;'))
         elif i == 'slack':
             out.append((i, 'xo' 'xb-17653672481-' + part))
+        elif i == 'supabase':
+            # Supabase CLI's local secret key: 22 characters, _ and an 8-character checksum.
+            out.append((i, 'sb' '_secret_' + part + '_' + r(AN, 8)))
     return out
 
 

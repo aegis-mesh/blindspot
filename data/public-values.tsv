@@ -5,3 +5,5 @@
 # id	part	source
 azurestorage	Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50u	https://learn.microsoft.com/en-us/azure/storage/common/storage-configure-connection-string
 slack	19874698323-pdFZKVeTuE8sk7oOcBrzbqgy	https://docs.slack.dev/reference/methods/oauth.v2.access
+supabase	N7UND0UgjKTVK-Uodkm0Hg	https://github.com/supabase/cli/blob/develop/packages/stack/src/Defaults.ts
+azurestorage	C2y6yDjf5/R+ob0N8A7Cgv30VRDJIWEHLM+4QDU5	https://learn.microsoft.com/en-us/azure/cosmos-db/emulator
