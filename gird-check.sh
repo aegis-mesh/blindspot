@@ -3714,7 +3714,8 @@ login "$H/.gemini/oauth_creds.json" "Gemini CLI login" gemini
 login "$H/.local/share/opencode/auth.json" "OpenCode provider keys" opencode
 login "$H/.railway/config.json" "Railway login" railway
 # Data platforms' own files: Databricks configuration profiles (docs.databricks.com), dbt's
-# profiles.yml, found as dbt finds it (docs.getdbt.com; a value taken from env_var is not in the file),
+# profiles.yml in DBT_PROFILES_DIR or ~/.dbt (docs.getdbt.com; a project's own profiles.yml is not read,
+# and a value taken from env_var is not in the file),
 # and Snowflake's connections.toml and config.toml, in the folder Snowflake CLI picks
 # (docs.snowflake.com): SNOWFLAKE_HOME when it is set and there, else ~/.snowflake when it is there,
 # else the system's own folder. A file is listed when a line sets one of the secrets its tool's docs

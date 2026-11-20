@@ -990,7 +990,7 @@ awk '/^# >>> agents[: ]/ { on = 1; next } /^# <<< agents$/ { exit }
       for (j = 1; j <= zn; j++) if (zrr[j] ~ /^!/) zx = add(zx, code(substr(zrr[j], 2))); else { zm++; zr = add(zr, code(zrr[j])) }
       if (acr[i] == "*") zr = "every ref"; else if (zm > 6) zr = plural(zm, "tag") " the source lists"
       if (zx != "") zr = zr ", except " zx
-      zq = acp[i] == "unsafe" ? "flagged" (acg[i] == "-" ? "" : ", except the releases the source names safe") : acs[i] == "-" ? "not flagged" : "flagged only at a commit the source lists"
+      zq = acp[i] == "unsafe" ? "flagged" (acg[i] == "-" ? "" : ", except the commits listed as not affected") : acs[i] == "-" ? "not flagged" : "flagged only at a commit the source lists"
       print "| " code(aca[i]) " | " esc(acw[i]) " | " zr " | " zq " | [" host(acu[i]) "](" acu[i] ") |" }
     print ""
     print "### npm packages"

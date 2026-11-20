@@ -570,7 +570,7 @@ A project whose workflows (`.github/workflows/*.yml` and `*.yaml`) use one of th
 | Action | Compromised | Refs that ran it | A pin to a commit | Source |
 |---|---|---|---|---|
 | `tj-actions/changed-files` | on 14 and 15 March 2025 | `v[1-9]`, `v[1-9].*`, `v[1-3][0-9]*`, `v4[0-4]*`, `v45`, `v45.0.[0-7]` | flagged only at a commit the source lists | [github.com](https://github.com/advisories/GHSA-mrrh-fwg8-r2c3) |
-| `tj-actions/eslint-changed-files` | on 11 March 2025, 18:42 to 20:31 UTC, and on 14 and 15 March 2025 | `v8.[1-6]`, `v9*`, `v1[0-9]*`, `v2[0-4]*`, `v25`, `v25.[0-3].*`, except `v18`, `v18.3.*`, `v19.0.[01]`, `v25.3.[1-9]*` | flagged, except the releases the source names safe | [wiz.io](https://www.wiz.io/blog/new-github-action-supply-chain-attack-reviewdog-action-setup) |
+| `tj-actions/eslint-changed-files` | on 11 March 2025, 18:42 to 20:31 UTC, and on 14 and 15 March 2025 | `v8.[1-6]`, `v9*`, `v1[0-9]*`, `v2[0-4]*`, `v25`, `v25.[0-3].*`, except `v18`, `v18.3.*`, `v19.0.[01]`, `v25.3.[1-9]*` | flagged, except the commits listed as not affected | [wiz.io](https://www.wiz.io/blog/new-github-action-supply-chain-attack-reviewdog-action-setup) |
 | `reviewdog/action-shellcheck` | on 11 March 2025, 18:42 to 20:31 UTC | every ref | flagged | [github.com](https://github.com/advisories/GHSA-qmg3-hpqr-gqvc) |
 | `reviewdog/action-composite-template` | on 11 March 2025, 18:42 to 20:31 UTC | every ref | flagged | [github.com](https://github.com/advisories/GHSA-qmg3-hpqr-gqvc) |
 | `reviewdog/action-staticcheck` | on 11 March 2025, 18:42 to 20:31 UTC | every ref | flagged | [github.com](https://github.com/advisories/GHSA-qmg3-hpqr-gqvc) |
@@ -578,7 +578,7 @@ A project whose workflows (`.github/workflows/*.yml` and `*.yaml`) use one of th
 | `reviewdog/action-typos` | on 11 March 2025, 18:42 to 20:31 UTC | every ref | flagged | [github.com](https://github.com/advisories/GHSA-qmg3-hpqr-gqvc) |
 | `reviewdog/action-setup` | on 11 March 2025, 18:42 to 20:31 UTC | `v1` | flagged only at a commit the source lists | [github.com](https://github.com/advisories/GHSA-qmg3-hpqr-gqvc) |
 | `xygeni/xygeni-action` | from about 3 to 10 March 2026 | `v5` | flagged only at a commit the source lists | [github.com](https://github.com/advisories/GHSA-f8q5-h5qh-33mh) |
-| `aquasecurity/trivy-action` | on 19 and 20 March 2026 | `0.*`, except `0.35.0` | flagged, except the releases the source names safe | [github.com](https://github.com/advisories/GHSA-69fq-xp46-6x23) |
+| `aquasecurity/trivy-action` | on 19 and 20 March 2026 | `0.*`, except `0.35.0` | flagged, except the commits listed as not affected | [github.com](https://github.com/advisories/GHSA-69fq-xp46-6x23) |
 | `aquasecurity/setup-trivy` | on 19 March 2026, about 17:43 to 21:44 UTC | `v0.2.*` | not flagged | [github.com](https://github.com/advisories/GHSA-69fq-xp46-6x23) |
 | `Checkmarx/kics-github-action` | on 23 March 2026, 12:58 to 16:50 UTC | 35 tags the source lists | flagged only at a commit the source lists | [wiz.io](https://www.wiz.io/blog/teampcp-attack-kics-github-action) |
 | `actions-cool/issues-helper` | from 18 May 2026 | 53 tags the source lists | flagged only at a commit the source lists | [stepsecurity.io](https://www.stepsecurity.io/blog/actions-cool-issues-helper-github-action-compromised-all-tags-point-to-imposter-commit-that-exfiltrates-ci-cd-credentials) |

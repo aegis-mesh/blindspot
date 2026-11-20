@@ -486,8 +486,8 @@ appended last, `not-counted` and `partial` only when above 0. Every character is
 `<name>: <outcome>`, with a colon and a space right after the name, and an account named `owasp` reads
 `owasp: clear`. A risk only the Mac has reads `owasp.ASI04:0+mac`.
 
-It never costs an account any content. The value is built by `fl_inv_fit HEAD PARTS TOKEN`, which
-holds the truncation `fleet_main` did inline. The value is at most 250 characters:
+It never costs an account any content. The value is built by `fl_value HEAD PARTS ACCOUNTS TOKEN` (#43 wrote this as `fl_inv_fit`; it was
+folded into #51's `fl_value` when the two merged), which holds the truncation `fleet_main` did inline. The value is at most 250 characters:
 
 1. Build the value as before, without the token (`base`).
 2. `base` is 250 characters or less: it is kept whole, and the token is added only when `base` plus
@@ -636,7 +636,7 @@ Fleet (`tests/run.sh`'s "fleet mode (--all-users)" part, with the stand-ins it a
 - fleet: the inventory value ends with the owasp token when it fits, and --inventory reads it back
 - fleet: a long inventory value has no owasp token and ends with +more
 - fleet: an inventory value of 244 to 250 characters with findings is kept whole, without the owasp
-  token (`fl_inv_fit`, cut out of `gird-fleet.sh` and called with a value of each length)
+  token (`fl_value`, cut out of `gird-fleet.sh` and called with a value of each length)
 - fleet: an inventory value with room for the owasp token gets it, at 250 characters
 - the existing "--summary-to-stdout prints the one summary line" regex allows the optional part
 
@@ -654,7 +654,7 @@ Screenshots are not tests; remaking them is a step in the pull request.
 - `gird-check.ps1`: the generated `owasp` block; `$IndHits`; `Owasp-Set`, `$OwFound`, `$OwCodes`,
   `Owasp-Sec`; the line after `CLine '05'`; the line in `$HeadFull`; `Owasp-Sec` after each `Section`
 - `gird-fleet.sh`: the two generated blocks; `FA_update` renamed `FA_tools`; `fl_codes`, `fl_owasp`,
-  `fl_inv_fit`; per-account tags and `N_PART` in `fleet_main`; the Mac's tags; the `owasp` JSON
+  `fl_value`; per-account tags and `N_PART` in `fleet_main`; the Mac's tags; the `owasp` JSON
   object, row and machine fields; the terminal block; `SUMMARY` (both assignments); the inventory token
 - `tests/run.sh`, `tests/run-ps.sh`, `tests/bash-only.txt`, `tests/fleet-flat.py`, `tests/make-fixture.sh`, `tests/owasp-kind.sh`
 - `README.md`, `docs/report.png`, `docs/report-full.png` (via `tools/screenshots.sh`)

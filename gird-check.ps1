@@ -2959,7 +2959,7 @@ Login (J $HomeDir '.claude/.credentials.json') 'Claude Code login' 'claude-code'
 Login (J $HomeDir '.gemini/oauth_creds.json') 'Gemini CLI login' 'gemini'
 Login (J $HomeDir '.local/share/opencode/auth.json') 'OpenCode provider keys' 'opencode'
 Login (J $HomeDir '.railway/config.json') 'Railway login' 'railway'
-# Data platforms' own files, found as gird-check.sh finds them: Databricks configuration profiles, dbt's
+# Data platforms' own files, read where gird-check.sh reads them: Databricks configuration profiles, dbt's
 # profiles.yml (a value taken from env_var is not in the file), and Snowflake's connections.toml and
 # config.toml in the folder Snowflake CLI picks, each listed when a line sets one of the secrets
 # gird-check.sh names.

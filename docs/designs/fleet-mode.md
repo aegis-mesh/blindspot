@@ -194,7 +194,7 @@ today, and no file paths, file names or key values:
   machine's row drops its last parts first, never leaving a `;` at its end. It ends with `+more`;
   the full result is in the saved file. The OWASP part
   (` | owasp.ASI03:1; counted 1`) goes last, only when it fits with every account's part whole, so it
-  never cuts an account's content (`fl_inv_fit`).
+  never cuts an account's content (`fl_value`).
 - The inventory script an MDM runs at check-in only reads the saved file, never scans, and reports
   `stale` when the last run is older than the age the admin sets (default 3 days), so a scan that
   stopped running never shows an old `clear`.

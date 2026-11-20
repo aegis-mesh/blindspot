@@ -1,7 +1,8 @@
 <#
 Prints the SHA-256 of a PowerShell script with its comments removed, and with a second path writes
 that copy there. tools/gen.sh packs gird-check.ps1 into blindspot-fleet.ps1 this way, so anyone can
-check the $PackedSha a release's blindspot-fleet.ps1 carries against the published gird-check.ps1:
+check the $PackedSha a release's blindspot-fleet.ps1 carries against gird-check.ps1 at that release's
+tag, with this file from the same tag:
 
   pwsh -NoProfile -File tools/strip-comments.ps1 gird-check.ps1
   powershell -NoProfile -ExecutionPolicy Bypass -File tools\strip-comments.ps1 gird-check.ps1
