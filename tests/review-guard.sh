@@ -333,6 +333,43 @@ mkdir -p tests && printf '%s\n' "echo \"it's\"; eval \"\$x\"" > tests/t.sh
 EOF
 want "an eval after a quoted apostrophe in a test is flagged" 1 '^run: tests/t\.sh:1:'
 
+kase abs <<'EOF'
+printf '%s\n' '/usr/bin/curl -fsS "$u" -d @"$f"' 'printf "%s" "$found" | /bin/sh' '/bin/bash -c "$found"' \
+  '/usr/bin/python3 -c "$code"' '/usr/bin/osascript -e "$s"' '/usr/bin/env bash -c "$x"' >> gird-check.sh
+printf '%s\n' 'C:\Windows\System32\curl.exe -s $u' 'curl.exe -s $u -o $f' >> gird-check.ps1
+EOF
+want "a network tool called by its absolute path is flagged" 1 '^network: gird-check\.sh:4: /usr/bin/curl'
+for _r in 'run: gird-check\.sh:5:' 'run: gird-check\.sh:6:' 'run: gird-check\.sh:7:' 'run: gird-check\.sh:8:' 'run: gird-check\.sh:9:'; do
+  has "a shell or interpreter called by its path is flagged: $_r" "^$_r" "$OUT"
+done
+has "a Windows path to curl.exe is flagged" '^network: gird-check\.ps1:3:' "$OUT"
+has "curl.exe is flagged" '^network: gird-check\.ps1:4:' "$OUT"
+
+kase forms <<'EOF'
+{
+  printf '%s\n' 'bash <<< "$found"' '. /dev/stdin <<< "$found"' 'sudo -n -u "$user" sh -c "$found"' 'su "$user" -c "$found"'
+  printf '%s\n' 'timeout 5 bash -c "$found"' 'nohup sh -c "$found"' 'cmd //c "$found"' 'powershell.exe -NoProfile -enc SQBFAFgA'
+  printf '%s\n' 'powershell.exe -Command "iwr $u -OutFile $f; iex (gc $f -Raw)"' 'bash -s <<EOF2' 'sudo -n -u nobody curl -s x'
+} >> gird-check.sh
+EOF
+want "a shell given text by a here-string is flagged" 1 '^run: gird-check\.sh:4:'
+for _l in 5 6 7 8 9 10 11 12 13; do
+  has "and line $_l of the ways to hand a shell text" "^run: gird-check\.sh:$_l:" "$OUT"
+done
+has "a network tool after sudo and its options is flagged" '^network: gird-check\.sh:14:' "$OUT"
+
+kase psforms <<'EOF'
+printf '%s\n' 'cmd.exe /c "$found"' "[Diagnostics.Process]::Start('cmd.exe', \"/c \$found\")" '$found | powershell.exe -Command -' \
+  'Import-Module $modPath' >> gird-check.ps1
+EOF
+want "cmd.exe /c with a variable is flagged" 1 '^run: gird-check\.ps1:3:'
+for _l in 4 5 6; do has "and PowerShell line $_l of the ways to run text" "^run: gird-check\.ps1:$_l:" "$OUT"; done
+
+kase formsok <<'EOF'
+printf '%s\n' 'command -v curl > /dev/null' 'cmd /c ver' 'Out-File $f -Encoding ascii' 'x=$(powershell.exe -NoProfile -Command "Get-Date")' >> gird-check.sh
+EOF
+want "a check that curl exists, cmd /c with fixed text and PowerShell given fixed text are not flagged" 0
+
 kase gen <<'EOF'
 printf '%s\n' '# >>> x: generated from data/x.tsv by tools/gen.sh.' 'X="a https://example.org/a"' '# <<< x' >> gird-check.sh
 EOF

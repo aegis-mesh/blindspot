@@ -17,15 +17,21 @@
 #             binary file other than a png, jpg, gif or webp image under docs/; a symbolic link or a
 #             submodule
 #   mode      a file whose mode changed, such as one made executable
-#   run       in code, an added line that runs text as code: eval and its kin, a shell, interpreter
-#             or trap given text built from a variable, a pipe into a shell, a decoder, outside
-#             tests/ a shell running a script a variable names (see RUN_SH, SHELL_FILE and RUN_PS
-#             below), any inline interpreter code (python -c, perl -e). A line that is
-#             only a # comment is skipped. In *.ps1, & on a variable is flagged unless the file
+#   run       in code, an added line that runs text as code: eval and its kin; a shell, interpreter
+#             or trap given text built from a variable (sh -c "$x", su -c "$x", PowerShell
+#             -Command "$x", cmd /c "$x"); a here-string or heredoc into a shell, or /dev/stdin;
+#             PowerShell reading its code from stdin or -EncodedCommand; a pipe into a shell; a
+#             decoder; outside tests/ a shell running a script a variable names (see RUN_SH,
+#             SHELL_FILE, PSRUN and RUN_PS below); any inline interpreter code (python -c, perl
+#             -e). A shell or interpreter counts wherever its name starts a word, so after sudo,
+#             timeout or nohup too, and a tool counts with its folder (/bin/sh) or .exe. A line that
+#             is only a # comment is skipped. In *.ps1, & on a variable is flagged unless the file
 #             assigns that variable a { script block }; & on an expression, a string with a
-#             variable in it or $env: is always flagged, and so is assigning Get-Command.
-#   network   in code, an added line that names a network tool where a command starts, or a
-#             network API (NET_SH and NET_PS below), comments included; and an http(s) URL in a line
+#             variable in it or $env: is always flagged, and so are assigning Get-Command,
+#             [Diagnostics.Process]::Start and Import-Module given a variable.
+#   network   in code, an added line that names a network tool where a command starts (after
+#             sudo, timeout, env and the like too, and with its folder or .exe), or a network API
+#             (NET_SH and NET_PS below), comments included; and an http(s) URL in a line
 #             that is not only a # comment, in any code but tests/ and the blocks tools/gen.sh
 #             writes from data/: a URL in a test is fixture data, and a test that calls out is
 #             caught by the tool it calls with
@@ -77,37 +83,62 @@ BAD_UTF8="$BAD_UTF8|$(o '\357\270')[$(o '\200')-$(o '\217')]|$(o '\357\273\277')
 
 B='(^|[^A-Za-z0-9_-])'   # word start
 E='([^A-Za-z0-9_-]|$)'   # word end
+# A tool may be named with its folder (/usr/bin/curl; in *.ps1 C:\Windows\System32\curl.exe too)
+# and .exe.
+P='([^[:space:];|&<>]*/)?'
+PW='([^[:space:];|&<>]*[/\\])?'
+X='(\.exe)?'
+# Words that run the command after them, with options of their own (sudo -n -u "$u" curl ...).
+WRAP='(sudo|doas|su|runuser|timeout|nohup|nice|ionice|stdbuf|setsid|caffeinate|chrt|taskset|chroot|unbuffer|env)'
 # Where a command starts: a line's start, after ; & | ( { ` = # ! or a keyword, or inside the
-# quotes of a -c or -e (bash -c 'curl ...'); then any env [-flags] and NAME=value words.
+# quotes of a -c or -e (bash -c 'curl ...'); then any NAME=value words, and any word of WRAP with
+# the words after it.
 START='(^[[:space:]]*|[;&|({`=#!][[:space:]]*|(then|do|else|if|while|until|exec|command|sudo|xargs|time)[[:space:]]+|[[:space:]]-[A-Za-z]*[ceE][[:space:]]+['"'"'"][[:space:]]*)'
-PRE='((env([[:space:]]+-[A-Za-z-]+)*|[A-Za-z_][A-Za-z0-9_]*=[^[:space:]]*)[[:space:]]+)*'
-CMD="$START$PRE"
+PRE="(($P$WRAP([[:space:]]+[^[:space:];|&]+)*|[A-Za-z_][A-Za-z0-9_]*=[^[:space:]]*)[[:space:]]+)*"
+CMD="$START$PRE$P"
+CMDW="$START$PRE$PW"
 # Network tools in bash and other code also start after any quote: a quoted command is often run.
 QSTART='(^[[:space:]]*|[;&|({`=#!'"'"'"][[:space:]]*|(then|do|else|if|while|until|exec|command|sudo|xargs|time)[[:space:]]+)'
-QCMD="$QSTART$PRE"
+QCMD="$QSTART$PRE$P"
 SHELLS='(ba|z|k|da)?sh|pwsh|powershell'
 VAR='("[^"]*)?[$`]'   # text that expands a variable or a command
-RUN_SH="${B}eval$E|$CMD(source|\.)[[:space:]]+[^[:space:];|&]*[\$(\`]"
-RUN_SH="$RUN_SH|$CMD($SHELLS)([[:space:]]+-[A-Za-z]+)*[[:space:]]+-[A-Za-z]*c[[:space:]]+$VAR"
+# A shell handed text to run, matched wherever its name starts a word (after sudo, timeout, nohup,
+# su and the like too): -c with a variable, a here-string or heredoc, or /dev/stdin; su -c with a
+# variable; sourcing a path built from a variable, or /dev/stdin.
+SHRUN="$B$P($SHELLS)$X([[:space:]]+-[A-Za-z]+)*[[:space:]]+-[A-Za-z]*c[[:space:]]+$VAR"
+SHRUN="$SHRUN|$B$P($SHELLS)$X([[:space:]]+-[A-Za-z-]*)*[[:space:]]*(<<|/dev/(stdin|fd/))"
+SHRUN="$SHRUN|${B}(su|runuser)[[:space:]].*[[:space:]](-[A-Za-z]*c|--command)[[:space:]=]+$VAR"
+SHRUN="$SHRUN|$CMD(source|\.)[[:space:]]+[^[:space:];|&]*([\$(\`]|/dev/(stdin|fd/))"
+RUN_SH="${B}eval$E|$SHRUN"
 # A shell running a script a variable names. Not read in tests/, which run the scripts under test
 # that way (bash "$SCRIPT").
-SHELL_FILE="$CMD($SHELLS)([[:space:]]+-[A-Za-z]+)*[[:space:]]+$VAR"
-INLINE="$CMD(python[0-9.]*|perl|ruby|node|php|osascript)([[:space:]]+-[A-Za-z]+)*[[:space:]]+-[A-Za-z]*[ceE][[:space:]]"
-RUN_SH="$RUN_SH|$INLINE+$VAR|${CMD}osascript$E"
-RUN_SH="$RUN_SH|${B}trap[[:space:]]+$VAR|(^|[[:space:]])\|[[:space:]]*($SHELLS)([[:space:];&\"']|$)"
+SHELL_FILE="$CMD($SHELLS)$X([[:space:]]+-[A-Za-z]+)*[[:space:]]+(<[[:space:]]*)?$VAR"
+INLINE="$B$P(python[0-9.]*|perl|ruby|node|php|osascript)$X([[:space:]]+-[A-Za-z]+)*[[:space:]]+-[A-Za-z]*[ceE][[:space:]]"
+RUN_SH="$RUN_SH|$INLINE+$VAR|${CMD}osascript$X$E"
+RUN_SH="$RUN_SH|${B}trap[[:space:]]+$VAR"
 RUN_SH="$RUN_SH|${B}system[[:space:]]*\(|\|[[:space:]]*getline|${B}exec\(|os\.(system|popen)|shell[[:space:]]*=[[:space:]]*True"
-RUN_SH="$RUN_SH|${B}base64([[:space:]]+-[A-Za-z-]+)*[[:space:]]+(-[A-Za-z]*[dD][A-Za-z]*|--decode)$E|${B}xxd([[:space:]]+-[A-Za-z]+)*[[:space:]]+-r"
+# Read without case, in every kind of code (gird-check.sh runs in Git Bash, where PowerShell and
+# cmd are a command away): PowerShell given text (-Command with a variable, -Command - or -File -
+# to read stdin, -EncodedCommand), and cmd /c with a variable.
+PSRUN="${B}(pwsh|powershell)$X$E.*[[:space:]]-c(o(m(m(a(n(d)?)?)?)?)?)?[[:space:]]+($VAR|-([[:space:]]|$))"
+PSRUN="$PSRUN|${B}(pwsh|powershell)$X$E.*[[:space:]]-f(i(l(e)?)?)?[[:space:]]+-([[:space:]]|$)"
+PSRUN="$PSRUN|${B}(pwsh|powershell)$X$E.*[[:space:]]-(ec|e(n(c(o(d(e(d(c(o(m(m(a(n(d)?)?)?)?)?)?)?)?)?)?)?)?)?)$E"
+PSRUN="$PSRUN|$B${P}cmd$X([[:space:]]+/{1,2}[a-z]+)*[[:space:]]+/{1,2}[ckr]([[:space:]].*)?[$\`]"
+# A pipe into a shell or cmd, and a decoder.
+PIPE="(^|[[:space:]])\|[[:space:]]*$P($SHELLS|cmd)$X([[:space:];&)\"'\\\`]|$)"
+PIPE="$PIPE|${B}base64([[:space:]]+-[A-Za-z-]+)*[[:space:]]+(-[A-Za-z]*[dD][A-Za-z]*|--decode)$E|${B}xxd([[:space:]]+-[A-Za-z]+)*[[:space:]]+-r"
+RUN_SH="$RUN_SH|$PIPE"
 RUN_PS="${B}(invoke-expression|iex|invoke-command|start-process|add-type)$E|scriptblock\][[:space:]]*::[[:space:]]*create"
 RUN_PS="$RUN_PS|newscriptblock|invokescript|invokecommand|reflection\.assembly\][[:space:]]*::[[:space:]]*load|\.invoke[[:space:]]*\("
 RUN_PS="$RUN_PS|=[[:space:]]*(get-command|gcm)$E|frombase64string|(^|[;({=[:space:]])&[[:space:]]*(\(|\"[^\"]*[$]|[$]env:)|$CMD\.[[:space:]]+[\$(]"
-RUN_PS="$RUN_PS|${B}(pwsh|powershell)(\.exe)?$E.*[[:space:]]-(c|command)[[:space:]]+$VAR|${B}(pwsh|powershell)(\.exe)?$E.*[[:space:]]-(e|ec|enc|encodedcommand)$E"
+RUN_PS="$RUN_PS|process\][[:space:]]*::[[:space:]]*start|processstartinfo|${B}(import-module|ipmo)([[:space:]]+-[a-z]+)*[[:space:]]+\"?[\$(]"
 # A network tool where a command starts (after # too, so a commented-out call is still seen),
 # followed by an argument rather than an =.
 ARG='([[:space:]]+[^=[:space:]]|[[:space:]]*$)'
-NET_SH="$QCMD(curl|wget|nc|ncat|netcat|socat|telnet|ssh|scp|sftp|rsync|ftp|tftp|nslookup|dig|host|drill|certutil|bitsadmin)$ARG"
+NET_SH="$QCMD(curl|wget|nc|ncat|netcat|socat|telnet|ssh|scp|sftp|rsync|ftp|tftp|nslookup|dig|host|drill|certutil|bitsadmin)$X$ARG"
 NET_SH="$NET_SH|${B}openssl[[:space:]]+s_client|/dev/(tcp|udp)/|/inet/|urlopen|urllib\.request|http\.client|${B}requests\.(get|post|put|patch|delete|head|request|Session)[[:space:]]*\("
 NET_SH="$NET_SH|${B}socket\.(socket|create_connection)|IO::Socket|LWP::|HTTP::Tiny"
-NET_PS="$CMD(curl|wget|irm|iwr|ssh|scp|sftp|nslookup|certutil|bitsadmin)$ARG|${B}(invoke-webrequest|invoke-restmethod|start-bitstransfer|resolve-dnsname|test-netconnection)$E"
+NET_PS="$CMDW(curl|wget|irm|iwr|ssh|scp|sftp|nslookup|certutil|bitsadmin)$X$ARG|${B}(invoke-webrequest|invoke-restmethod|start-bitstransfer|resolve-dnsname|test-netconnection)$E"
 NET_PS="$NET_PS|webclient|httpclient|webrequest\]|downloadstring|downloadfile|tcpclient|udpclient|net\.dns|net\.sockets"
 URL='https?://'
 
@@ -139,13 +170,18 @@ while IFS= read -r -d '' rec; do
   case "$rec" in "-$TAB-$TAB"*) printf '%s\0' "${rec#-"$TAB"-"$TAB"}" >> "$W/binary" ;; esac
 done < "$W/num"
 # rule NAME PATTERN FILE [GREP-FLAG]: one finding for each "number<TAB>text" line of FILE whose
-# text matches PATTERN (an ERE; ^ is the start of the text).
+# text matches PATTERN (an ERE; ^ is the start of the text). A line already found by NAME in this
+# file is not listed again.
 rule() {
   cut -f2- "$3" > "$W/text"
   grep -an ${4:-} -E -- "$2" "$W/text" | cut -d: -f1 > "$W/hits"
   [ -s "$W/hits" ] || return 0
   awk 'NR == FNR { want[$1] = 1; next } want[FNR]' "$W/hits" "$3" > "$W/hitlines"
-  while IFS= read -r l; do finding "$1" "$path" "${l%%"$TAB"*}" "${l#*"$TAB"}"; done < "$W/hitlines"
+  while IFS= read -r l; do
+    grep -qxF -- "$1 ${l%%"$TAB"*}" "$W/seen" && continue
+    printf '%s\n' "$1 ${l%%"$TAB"*}" >> "$W/seen"
+    finding "$1" "$path" "${l%%"$TAB"*}" "${l#*"$TAB"}"
+  done < "$W/hitlines"
 }
 # fixtures IN OUT: IN's lines, with single-quoted text left out of each line that writes a fixture.
 fixtures() {
@@ -190,7 +226,7 @@ is_image() {
 
 N=0
 while IFS= read -r -d '' meta && IFS= read -r -d '' path; do
-  N=$((N + 1))
+  N=$((N + 1)); : > "$W/seen"
   set -- $meta
   newmode=$2; oldmode=${1#:}; status=$5
   if [ -n "$(printf '%s' "$path" | tr -d ' -~')" ]; then finding hidden "$path" 0 "a byte in the file name that is not printable ASCII"; fi
@@ -248,12 +284,13 @@ while IFS= read -r -d '' meta && IFS= read -r -d '' path; do
     esac
     cp "$W/add" "$W/add-net"
     if [ "$ps" = 1 ]; then
-      rule run "$RUN_PS" "$W/code-run" -i
+      rule run "$RUN_PS|$PSRUN|$PIPE" "$W/code-run" -i
       call_operator
       rule network "$NET_PS" "$W/add-net" -i
     else
       rule run "$RUN_SH" "$W/code-run"
       rule run "$INLINE" "$W/code-run"
+      rule run "$PSRUN" "$W/code-run" -i
       case "$path" in tests/*) ;; *) rule run "$SHELL_FILE" "$W/code-run" ;; esac
       rule network "$NET_SH" "$W/add-net"
     fi
