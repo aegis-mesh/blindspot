@@ -3654,6 +3654,18 @@ GA_RUN "$GB" "$GB/deep.txt"
 chmod 755 "$GB/src/github.com/org/repo/.github/workflows"
 has    "a workflows folder that far down that can't be read leaves the row not fully checked" 'GitHub Actions +not fully checked' "$GB/deep.txt"
 SKIPPING=""
+# A ref pattern with a range that runs down, such as v[9-1], which tools/gen.sh refuses, put in a copy
+# of the script: PowerShell's -clike throws on it, and gird-check.ps1 reads it as matching nothing and
+# counts the workflow as not read; bash's case reads it as matching nothing. Either way a use another
+# pattern of the line matches is flagged, and the report reaches its end.
+GR=$WORK/ga-rev; rm -rf "$GR"; mkdir -p "$GR/code/r/.github/workflows" "$GR/code/s/.github/workflows" "$GR/AppData/Roaming" "$GR/AppData/Local/Temp"
+printf 'jobs:\n  a:\n    steps:\n      - uses: aquasecurity/trivy-action@0.28.0\n' > "$GR/code/r/.github/workflows/ci.yml"
+printf 'jobs:\n  a:\n    steps:\n      - uses: aquasecurity/trivy-action@v5\n' > "$GR/code/s/.github/workflows/ci.yml"
+sed "s#^\(  ,@('aquasecurity/trivy-action', 'aquasecurity/trivy-action', '\)#\1v[9-1] #" "$SCRIPT" > "$WORK/ga-rev.ps1"
+env -i PATH="$WORK/bin" HOME="$WORK/pshome" USERPROFILE="$GR" APPDATA="$GR/AppData/Roaming" LOCALAPPDATA="$GR/AppData/Local" TEMP="$GR/AppData/Local/Temp" \
+  LANG=en_US.UTF-8 "$PWSH" -NoProfile -NonInteractive -File "$WORK/ga-rev.ps1" -Offline 2>&1 | tr -s ' \n' '  ' > "$GR/out.txt"
+has    "a ref pattern with a range that runs down: a use another pattern matches is flagged, and the report ends" 'Uses aquasecurity/trivy-action@0\.28\.0, compromised.*Your AI Exposure Check' "$GR/out.txt"
+has    "and the workflows it is tried on: bash reads them, PowerShell counts them as not read" 'GitHub Actions .*2 workflow files could not be read' "$GR/out.txt"
 
 echo "a new incident of each kind is data lines only"
 # tests/made-up.sh appends a made-up platform, startup file, wiper file, planted file and Python

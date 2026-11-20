@@ -8004,7 +8004,7 @@ foreach ($wf in $WfSorted) {
   if (-not (Is-SafeToRead $wf) -or (Too-Big $wf)) { $ActUnread++; continue }
   $t = $null; try { $t = [IO.File]::ReadAllText($wf) } catch { $t = $null }
   if ($null -eq $t) { $ActUnread++; continue }
-  $N_WF++
+  $wfBad = 0
   foreach ($u in @(Act-Uses $t)) {
     $ur = $u[1]; $sha = ''
     if ($ur.Length -eq 40 -and $ur -match '^[0-9a-fA-F]+$') { $sha = $ur.ToLowerInvariant() }
@@ -8015,8 +8015,10 @@ foreach ($wf in $WfSorted) {
         if ((",$($row[3]),").Contains(",$sha,")) { $kind = 'commit' } elseif (-not (",$($row[4]),").Contains(",$sha,") -and $row[5] -ceq 'unsafe') { $kind = 'pin' }
       } else {
         $in = $false; $out = $false
+        # A pattern -clike throws on, such as [9-1], which tools/gen.sh refuses, matches nothing, as in
+        # bash's case, and leaves the workflow not read: never a stopped report.
         foreach ($pt in $row[2].Split(' ')) {
-          if ($pt.StartsWith('!')) { if ($ur -clike $pt.Substring(1)) { $out = $true } } elseif ($ur -clike $pt) { $in = $true }
+          try { if ($pt.StartsWith('!')) { if ($ur -clike $pt.Substring(1)) { $out = $true } } elseif ($ur -clike $pt) { $in = $true } } catch { $wfBad = 1 }
         }
         if ($in -and -not $out) { $kind = 'ref' }
       }
@@ -8027,6 +8029,7 @@ foreach ($wf in $WfSorted) {
       $ActHits.Add(@($wf, $row[1], $shown, $kind, $row[6], $row[7], $row[8]))
     }
   }
+  if ($wfBad) { $ActUnread++ } else { $N_WF++ }
 }
 $N_ACT = $ActHits.Count
 $N_ACT_PROJ = @($ActHits | ForEach-Object { [IO.Path]::GetDirectoryName([IO.Path]::GetDirectoryName([IO.Path]::GetDirectoryName($_[0]))) } | Sort-Object -Unique).Count

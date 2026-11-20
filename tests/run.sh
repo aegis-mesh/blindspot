@@ -3832,6 +3832,17 @@ mkdir -p "$WORK/ast12/code/w/.github/workflows"
 printf 'jobs:\n  a:\n    steps:\n      - uses: tj-actions/changed-files@v44\n' > "$WORK/ast12/code/w/.github/workflows/ci.yml"
 ast10 ast12 wf '["\047]?uses["\047]?'
 has    "an awk that crashes reading a workflow leaves the Actions row not fully checked" 'GitHub Actions +not fully checked: 1 workflow file could not be read' "$WORK/ast12-wf.txt"
+# A ref pattern with a range that runs down, such as v[9-1], which tools/gen.sh refuses, put in a copy
+# of the script: bash's case reads it as matching nothing; PowerShell's -clike throws on it, and
+# gird-check.ps1 reads it as matching nothing and counts the workflow as not read. Either way a use
+# another pattern of the line matches is flagged, and the report reaches its end.
+GR=$WORK/ga-rev; rm -rf "$GR"; mkdir -p "$GR/code/r/.github/workflows" "$GR/code/s/.github/workflows" "$GR/AppData/Roaming" "$GR/AppData/Local/Temp"
+printf 'jobs:\n  a:\n    steps:\n      - uses: aquasecurity/trivy-action@0.28.0\n' > "$GR/code/r/.github/workflows/ci.yml"
+printf 'jobs:\n  a:\n    steps:\n      - uses: aquasecurity/trivy-action@v5\n' > "$GR/code/s/.github/workflows/ci.yml"
+sed 's#^\(aquasecurity/trivy-action|aquasecurity/trivy-action|\)#\1v[9-1] #' "$SCRIPT" > "$WORK/ga-rev.sh"
+env HOME="$GR" PATH=/usr/bin:/bin bash "$WORK/ga-rev.sh" --offline 2>&1 | tr -s ' \n' '  ' > "$GR/out.txt"
+has    "a ref pattern with a range that runs down: a use another pattern matches is flagged, and the report ends" 'Uses aquasecurity/trivy-action@0\.28\.0, compromised.*Your AI Exposure Check' "$GR/out.txt"
+hasnot "and the workflows it is tried on: bash reads them, PowerShell counts them as not read" 'could not be read' "$GR/out.txt"
 
 echo "a new incident of each kind is data lines only"
 # tests/made-up.sh appends a made-up platform, startup file, wiper file, planted file and Python
@@ -3910,6 +3921,7 @@ gen_refuses "an action good commit that is not 40 hex digits" actions.tsv "a/b${
 gen_refuses "an action commit listed as malicious and good" actions.tsv "a/b${T}v1${T}0e58ed8671d6b60d0890c21b07f8835ace038e67${T}0e58ed8671d6b60d0890c21b07f8835ace038e67${T}safe${T}in 2026${T}https://example.com/a${T}fix"
 gen_refuses "an action fix with a |"                      actions.tsv "a/b${T}v1${T}-${T}-${T}safe${T}in 2026${T}https://example.com/a${T}a | b"
 gen_refuses "an action ref with a [ left open"            actions.tsv "a/b${T}v[1-9] v1[${T}-${T}-${T}safe${T}in 2026${T}https://example.com/a${T}fix"
+gen_refuses "an action ref with a range that runs down"    actions.tsv "a/b${T}v[1-9] v[9-1]${T}-${T}-${T}safe${T}in 2026${T}https://example.com/a${T}fix"
 gen_refuses "a platform with an unknown incident"       platforms.tsv "nosuch${T}X${T}x${T}~/.x/${T}CLI found${T}advice${T}summary"
 gen_refuses "a platform advice with a \$"               platforms.tsv "railway${T}X${T}x${T}~/.x/${T}CLI found${T}costs \$5${T}summary"
 gen_refuses "a platform with another found word"        platforms.tsv "railway${T}X${T}x${T}~/.x/${T}present${T}advice${T}summary"
