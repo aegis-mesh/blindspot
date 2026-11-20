@@ -2298,22 +2298,24 @@ WORM_CMD_WEAK=""; [ -n "$WORM_RUN_WEAK" ] && WORM_CMD_WEAK=$(worm_cmd "$WORM_RUN
 # folders agents and editors keep their files in. Projects do this too (a hook that sets up a tool's
 # path), so it is named for the person to check, never counted as malware. A command runs one as
 # worm_cmd reads it, with sh, bash, zsh and python too (never the code of -c, -e or -p), or as the
-# command itself. START_PATH is the script; START_CMD a command that runs one.
+# command itself, and after the words that run the rest of a command: nohup, exec, env (as
+# /usr/bin/env too), npx and VAR=value. START_PATH is the script; START_CMD a command that runs one.
 START_PATH='\.(claude|vscode|github|codex|cursor)([/\\]+[A-Za-z0-9._@+-]+)+'
-start_cmd() {
-  _wf='(\\"|'"'"')?((\\")?\$\{?(CLAUDE_PROJECT_DIR|workspaceFolder)\}?(\\")?[/\\]+|\.[/\\]+)?'"$START_PATH"'(\\"|["'"'"'[:space:];&|)])'
+start_cmd() { # script-ERE prefix-ERE: four expressions, one per line
+  _wf='(\\"|'"'"')?'"$2$1"'(\\"|["'"'"'[:space:];&|)])'
   _wp='(([^[:space:]"\\]|\\\\)*(/|\\\\))?'
+  _wx='((nohup|exec|npx|'"$_wp"'env)[[:space:]]+|[A-Za-z_][A-Za-z0-9_]*=([^[:space:]"'"'"'\\;&|]|\\\\)*[[:space:]]+)*'
   _wo='(--|--[A-BDF-OQ-Za-bdf-oq-z0-9][^[:space:]"\\]*|-[A-BDF-OQ-Za-bdf-oq-z0-9]+)[[:space:]]+'
   _wq='[^"\\'"'"']|\\[^"]|'"'"'([^'"'"'"\\]|\\.)*'"'"'|\\"([^"\\]|\\[^"])*\\"'
   _ws='"command"[[:space:]]*:[[:space:]]*"[[:space:]]*(('"$_wq"')*(;|&&?|\|\|?)[[:space:]]*)?'
   _wn='(node|tsx|bun|deno|sh|bash|zsh|python[0-9.]*|py)(\.exe)?'
   _wi='"command"[[:space:]]*:[[:space:]]*"'"$_wp$_wn"'"'
-  _wa='"args"[[:space:]]*:[[:space:]]*\[([[:space:]]*"([^"\\]|\\.)*"[[:space:]]*,)*[[:space:]]*"(\$\{?(workspaceFolder|CLAUDE_PROJECT_DIR)\}?[/\\]+|\.[/\\]+)?'"$START_PATH"'"'
+  _wa='"args"[[:space:]]*:[[:space:]]*\[([[:space:]]*"([^"\\]|\\.)*"[[:space:]]*,)*[[:space:]]*"(\$\{?(workspaceFolder|CLAUDE_PROJECT_DIR)\}?[/\\]+|\.[/\\]+)?'"$1"'"'
   _wb='([^{}]|\{[^{}]*\})*'
-  printf '%s\n%s\n%s\n%s' "$_ws$_wp${_wn}[[:space:]]+($_wo)*(run[[:space:]]+($_wo)*)?$_wf" "$_ws$_wf" "$_wi$_wb$_wa" "$_wa$_wb$_wi"
+  printf '%s\n%s\n%s\n%s' "$_ws$_wx$_wp${_wn}[[:space:]]+($_wo)*(run[[:space:]]+($_wo)*)?$_wf" "$_ws$_wx$_wf" "$_wi$_wb$_wa" "$_wa$_wb$_wi"
 }
 # One expression per line, each given to grep alone: macOS's grep can crash on all four joined by |.
-START_CMD=$(start_cmd)
+START_CMD=$(start_cmd "$START_PATH" '((\\")?\$\{?(CLAUDE_PROJECT_DIR|workspaceFolder)\}?(\\")?[/\\]+|\.[/\\]+)?')
 # The elements of every array that is the value of the key K, one line each, from flat's one-line
 # text: a session-start hook's entries, or each task of a tasks.json. Strings are copied whole and
 # brackets counted outside them only, each piece split once, so the time grows with the file's size.
@@ -3339,14 +3341,15 @@ N_AUTO_PROJ=$(printf '%s' "$AUTO_ROWS" | cut -f1 | sed -E 's#/\.(claude|vscode)/
 # folder-open task in one project that both run a planted file (data/planted.tsv: its folder and name)
 # of one name, so it runs whether the folder opens in an agent or in an editor. Still a script to read, never a
 # compromised machine: the file itself counts only by its published SHA-256 or beside a worm's own file.
-# A worktree is left out when its repo is listed.
+# A worktree is left out when its repo is listed. The list is in byte order of the path, as
+# gird-check.ps1 sorts it.
 WIRED=$(printf '%s\n' "$PLANTED" "-" "$START_TASKS" "-" "$START_HOOKS" | awk -F "$TAB" '
   function base(s) { sub(/.*\//, "", s); return s }
   $0 == "-" { part++; next }
   part == 0 { if (NF) P[$0] = 1; next }
   part == 1 { if (NF == 2 && ($2 in P)) T[$1 FS base($2)] = 1; next }
   NF == 2 && ($2 in P) && (($1 FS base($2)) in T) && !seen[$1 FS base($2)]++ { r[++n] = $1 FS base($2); p[$1] = 1 }
-  END { for (i = 1; i <= n; i++) { split(r[i], x, FS); w = x[1]; sub(/\/\.claude\/worktrees\/.*/, "", w); if (w != x[1] && (w in p)) continue; print r[i] } }')
+  END { for (i = 1; i <= n; i++) { split(r[i], x, FS); w = x[1]; sub(/\/\.claude\/worktrees\/.*/, "", w); if (w != x[1] && (w in p)) continue; print r[i] } }' | LC_ALL=C sort)
 N_WIRED=$(printf '%s' "$WIRED" | cut -f1 | sort -u | grep -c .)
 # The AntV wave also copies its payload to ~/.claude/package and ~/.codex/package and adds a
 # SessionStart hook that runs it to the Claude Code and Codex settings files it finds (SafeDep). The
@@ -8995,6 +8998,10 @@ case "$OS" in
   MINGW*|MSYS*|CYGWIN*) _store="Windows Credential Manager or a secrets manager" ;;
   *)      _store="a secrets manager" ;;
 esac
+# Opening a project in an editor or an agent runs its worm-style startup, so reading those scripts comes
+# before the fixes that open projects to move or rotate keys.
+[ "$N_WIRED" -gt 0 ] && todo 2 "Read the script each project in section 2 starts the way worms do, before an agent or editor opens that folder. If you didn't put it there, delete it, the hook and the task."
+[ "$N_UHOOK" -gt 0 ] && todo 2 "Check the session hooks section 2 lists in your own agent settings. If you didn't add them, delete them and read what is in the folder they run from."
 N_AK=$(count_lines "$AK_LINKS")
 [ "$N_AK" -gt 0 ] && todo 2 "Delete the links to ~/.ssh/authorized_keys listed in section 2."
 [ "$KEY_FILES" -gt 0 ] && todo 3 "Move keys out of shell profiles, history and .env files into $_store, then rotate them."
@@ -9007,8 +9014,6 @@ N_AK=$(count_lines "$AK_LINKS")
 [ "$N_REMOTE" -gt 0 ] && todo 1 "Remove the rules section 1 lists that let an agent run commands on other machines, or change them to ask first."
 [ "$N_OLD" -gt 0 ] && todo 1 "Update the tools listed in section 1 that have a security fix."
 [ "$N_IDLE" -gt 0 ] && todo 1 "Remove agents you no longer use: $IDLE_NAMES. A poisoned package can drive an installed agent, which is how the Nx attack stole keys."
-[ "$N_WIRED" -gt 0 ] && todo 2 "Read the script each project in section 2 starts the way worms do, before an agent or editor opens that folder. If you didn't put it there, delete it, the hook and the task."
-[ "$N_UHOOK" -gt 0 ] && todo 2 "Check the session hooks section 2 lists in your own agent settings. If you didn't add them, delete them and read what is in the folder they run from."
 [ "$N_AUTO" -gt 0 ] && todo 2 "Read the settings marked in section 2 before an agent or editor opens those folders, and delete anything you didn't put there yourself. A cloned project can bring these with it."
 [ "$N_LOOK" -gt 0 ] && todo 2 "Read the files section 2 lists as named like files worms plant, and delete any you didn't put there yourself."
 # A version to update needs its own fix unless the compromised-machine fix already deletes it (a

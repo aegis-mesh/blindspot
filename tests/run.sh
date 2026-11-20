@@ -1055,6 +1055,28 @@ ast10 ast10 pick '-E "runOn"[[:space:]]*:[[:space:]]*"[Ff][Oo]'
 has    "a grep that crashes picking the folder-open tasks names the file as not read" "$AST10_NR~/code/p/\\.vscode/tasks\\.json" "$WORK/ast10-pick.txt"
 ast10 ast10 worm '(router_runtime\.js|math_init\.js)'
 has    "a grep that crashes matching a hook that runs a worm file names the file as not read" "$AST10_NR~/code/r/\\.claude/settings\\.json" "$WORK/ast10-worm.txt"
+# A hook and a task that run the planted file after a word that runs the rest of the command (nohup, exec,
+# /usr/bin/env, npx, VAR=value) are worm-style startup too; an echo of those words is not. The projects are
+# listed in byte order of their paths, as both scripts sort them, and What to do says to read those
+# scripts before it says to move and rotate a key one of those projects holds: opening the project to do
+# that would run them.
+for _p in w-1 w.2 w/p w_3 w9; do mkdir -p "$WORK/wst/code/$_p/.claude" "$WORK/wst/code/$_p/.vscode"; done
+wst() { printf '{"hooks":{"SessionStart":[{"hooks":[{"type":"command","command":"%s"}]}]}}\n' "$2" > "$WORK/wst/code/$1/.claude/settings.json"
+  printf '{"version":"2.0.0","tasks":[{"label":"env","command":"%s","runOptions":{"runOn":"folderOpen"}}]}\n' "$3" > "$WORK/wst/code/$1/.vscode/tasks.json"; }
+wst w-1 'nohup node .claude/setup.mjs &' 'exec node .claude/setup.mjs'
+wst w.2 '/usr/bin/env node .claude/setup.mjs' 'npx node .claude/setup.mjs'
+wst w/p 'NODE_OPTIONS= node .claude/setup.mjs' 'FOO=bar BAZ=1 node .claude/setup.mjs'
+wst w_3 'node .claude/setup.mjs' 'node .claude/setup.mjs'
+wst w9 'echo nohup node .claude/setup.mjs' 'echo exec node .claude/setup.mjs'
+printf 'GITHUB_TOKEN=%s\n' "gh""p_$(rnd 36)" > "$WORK/wst/code/w_3/.env"
+HOME="$WORK/wst" bash "$SCRIPT" --offline > "$WORK/wst-raw.txt" 2>&1
+tr -s ' \n' '  ' < "$WORK/wst-raw.txt" > "$WORK/wst.txt"; sed -n '/WHAT TO DO/,$p' "$WORK/wst-raw.txt" | tr -s ' \n' '  ' > "$WORK/wst-todo.txt"
+has    "a hook after nohup and a task after exec that run a planted file are worm-style startup" '! ~/code/w-1 A session-start hook and a folder-open task both run setup\.mjs' "$WORK/wst.txt"
+has    "and so are ones after /usr/bin/env and npx" '! ~/code/w\.2 A session-start hook and a folder-open task both run setup\.mjs' "$WORK/wst.txt"
+has    "and ones after VAR=value" '! ~/code/w/p A session-start hook and a folder-open task both run setup\.mjs' "$WORK/wst.txt"
+hasnot "an echo that names those words runs nothing" '~/code/w9 A session-start hook' "$WORK/wst.txt"
+has    "the worm-style startup projects are listed in byte order of their paths" '! ~/code/w-1 A session-start hook.* ! ~/code/w\.2 A session-start hook.* ! ~/code/w/p A session-start hook.* ! ~/code/w_3 A session-start hook' "$WORK/wst.txt"
+has    "What to do says to read those scripts before it says to move and rotate keys" 'Read the script each project in section 2 starts the way worms do.*Move keys out of shell profiles, history and \.env files' "$WORK/wst-todo.txt"
 # A session-start hook of 5,000 commands, each running a script (225 KB): every script is named, in time
 # that grows with the size of the file (a grep for each command took three minutes on macOS).
 mkdir -p "$WORK/ssbig/code/p/.claude"

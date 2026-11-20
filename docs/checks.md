@@ -1849,9 +1849,9 @@ A project whose workflows (`.github/workflows/*.yml` and `*.yaml`) use one of th
   beside it.
 - When a session-start hook or a task that runs on opening runs a script from the project's own
   `.claude`, `.vscode`, `.github`, `.codex` or `.cursor` folder (with node, bun, deno, tsx, sh, bash,
-  zsh, python or py, or as the command itself, in any part of a command split at `;`, `&` or `|`), the
-  row names that script for you to read: projects do this too, such as a hook that sets up a tool's
-  path.
+  zsh, python or py, or as the command itself, in any part of a command split at `;`, `&` or `|`, also
+  after `nohup`, `exec`, `env`, `npx` or `VAR=value`), the row names that script for you to read:
+  projects do this too, such as a hook that sets up a tool's path.
 - A project where a session-start hook and a folder-open task both run one of the files worms plant in
   `.claude` or `.vscode` (the folder and the name, from `data/planted.tsv`), the way the Mini
   Shai-Hulud and AntV worms start themselves (Wiz, SafeDep), is listed on its own, first, still as a

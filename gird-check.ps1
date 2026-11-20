@@ -1634,21 +1634,25 @@ $RxWormAlone = Worm-Cmd $WormNameAlone; $RxWormWeak = Worm-Cmd $WormNameWeak
 # folders agents and editors keep their files in. Projects do this too (a hook that sets up a tool's
 # path), so it is named for the person to check, never counted as malware. A command runs one as
 # Worm-Cmd reads it, with sh, bash, zsh and python too (never the code of -c, -e or -p), or as the
-# command itself. The same expressions as gird-check.sh's START_PATH and START_CMD.
+# command itself, and after the words that run the rest of a command: nohup, exec, env (as
+# /usr/bin/env too), npx and VAR=value. The same expressions as gird-check.sh's START_PATH and
+# START_CMD (start_cmd).
 $StartPath = '\.(claude|vscode|github|codex|cursor)([/\\]+[A-Za-z0-9._@+-]+)+'
 $RxStartPath = New-Object regex($StartPath, $RxOpt, $RxTimeout)
-$RxStartCmd = & {
-  $cf = '(\\"|'')?((\\")?\$\{?(CLAUDE_PROJECT_DIR|workspaceFolder)\}?(\\")?[/\\]+|\.[/\\]+)?' + $StartPath + '(\\"|["''\s;&|)])'
+function Start-Cmd([string]$path, [string]$pre) {
+  $cf = '(\\"|'')?' + $pre + $path + '(\\"|["''\s;&|)])'
   $cp = '(([^\s"\\]|\\\\)*(/|\\\\))?'
+  $cx = '((nohup|exec|npx|' + $cp + 'env)\s+|[A-Za-z_][A-Za-z0-9_]*=([^\s"''\\;&|]|\\\\)*\s+)*'
   $co = '(--|--[A-BDF-OQ-Za-bdf-oq-z0-9][^\s"\\]*|-[A-BDF-OQ-Za-bdf-oq-z0-9]+)\s+'
   $cq = '[^"\\'']|\\[^"]|''([^''"\\]|\\.)*''|\\"([^"\\]|\\[^"])*\\"'
   $cs = '"command"\s*:\s*"\s*((' + $cq + ')*(;|&&?|\|\|?)\s*)?'
   $cn = '(node|tsx|bun|deno|sh|bash|zsh|python[0-9.]*|py)(\.exe)?'
   $ci = '"command"\s*:\s*"' + $cp + $cn + '"'
-  $ca = '"args"\s*:\s*\[(\s*"(?:[^"\\]|\\.)*"\s*,)*\s*"(\$\{?(workspaceFolder|CLAUDE_PROJECT_DIR)\}?[/\\]+|\.[/\\]+)?' + $StartPath + '"'
+  $ca = '"args"\s*:\s*\[(\s*"(?:[^"\\]|\\.)*"\s*,)*\s*"(\$\{?(workspaceFolder|CLAUDE_PROJECT_DIR)\}?[/\\]+|\.[/\\]+)?' + $path + '"'
   $cb = '([^{}]|\{[^{}]*\})*'
-  New-Object regex(($cs + $cp + $cn + '\s+(' + $co + ')*(run\s+(' + $co + ')*)?' + $cf + '|' + $cs + $cf + '|' + $ci + $cb + $ca + '|' + $ca + $cb + $ci), $RxOpt, $RxTimeout)
+  New-Object regex(($cs + $cx + $cp + $cn + '\s+(' + $co + ')*(run\s+(' + $co + ')*)?' + $cf + '|' + $cs + $cx + $cf + '|' + $ci + $cb + $ca + '|' + $ca + $cb + $ci), $RxOpt, $RxTimeout)
 }
+$RxStartCmd = Start-Cmd $StartPath '((\\")?\$\{?(CLAUDE_PROJECT_DIR|workspaceFolder)\}?(\\")?[/\\]+|\.[/\\]+)?'
 # The elements of every array that is the value of the key $key, from Flat-Text's text: a
 # session-start hook's entries, or each task of a tasks.json. Strings are skipped whole and brackets
 # counted outside them only, so each character is looked at once. As gird-check.sh's json_elems.
@@ -2611,6 +2615,10 @@ foreach ($x in $StartHooks) {
   if ($null -ne (Planted-Note $x.Script) -and $TaskSet.Contains($k) -and $WiredSeen.Add($k)) { $Wired.Add(@{ Proj = $x.Proj; Name = $b }); [void]$WiredProj.Add($x.Proj) }
 }
 $Wired = @($Wired | Where-Object { $r = $_.Proj -replace '[/\\]\.claude[/\\]worktrees[/\\].*$', ''; -not ($r -ne $_.Proj -and $WiredProj.Contains($r)) })
+# In the order gird-check.sh lists them: byte order of the path with / between folders, then the name.
+# The Array overload sorts $Wired itself (a generic one would sort a copy of it).
+$wk = [string[]]@($Wired | ForEach-Object { $_.Proj.Replace('\', '/') + "`t" + $_.Name })
+[Array]::Sort([Array]$wk, [Array]$Wired, [Collections.IComparer][StringComparer]::Ordinal)
 $WiredP = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::Ordinal)
 foreach ($x in $Wired) { [void]$WiredP.Add($x.Proj) }
 $N_WIRED = $WiredP.Count
@@ -8010,6 +8018,10 @@ if ($LITELLM_HIT -eq 0 -and $LitePyc.Count -gt 0) { Add-Todo 5 'A leftover cook.
 Add-Advice 'lock'
 Add-Advice 'update'
 $Store = 'a secrets manager'; if ($OnWindows) { $Store = 'Windows Credential Manager or a secrets manager' }
+# Opening a project in an editor or an agent runs its worm-style startup, so reading those scripts comes
+# before the fixes that open projects to move or rotate keys.
+if ($N_WIRED -gt 0) { Add-Todo 2 'Read the script each project in section 2 starts the way worms do, before an agent or editor opens that folder. If you didn''t put it there, delete it, the hook and the task.' }
+if ($N_UHOOK -gt 0) { Add-Todo 2 'Check the session hooks section 2 lists in your own agent settings. If you didn''t add them, delete them and read what is in the folder they run from.' }
 $N_AK = $AkLinks.Count
 if ($N_AK -gt 0) { Add-Todo 2 'Delete the links to ~/.ssh/authorized_keys listed in section 2.' }
 if ($KEY_FILES -gt 0) { Add-Todo 3 "Move keys out of shell profiles, history and .env files into $Store, then rotate them." }
@@ -8022,8 +8034,6 @@ if ($N_YOLO -gt 0) { Add-Todo 1 'Turn off run-without-asking in the agents liste
 if ($N_REMOTE -gt 0) { Add-Todo 1 'Remove the rules section 1 lists that let an agent run commands on other machines, or change them to ask first.' }
 if ($N_OLD -gt 0) { Add-Todo 1 'Update the tools listed in section 1 that have a security fix.' }
 if ($N_IDLE -gt 0) { Add-Todo 1 "Remove agents you no longer use: $($IdleNames -join ', '). A poisoned package can drive an installed agent, which is how the Nx attack stole keys." }
-if ($N_WIRED -gt 0) { Add-Todo 2 'Read the script each project in section 2 starts the way worms do, before an agent or editor opens that folder. If you didn''t put it there, delete it, the hook and the task.' }
-if ($N_UHOOK -gt 0) { Add-Todo 2 'Check the session hooks section 2 lists in your own agent settings. If you didn''t add them, delete them and read what is in the folder they run from.' }
 if ($N_AUTO -gt 0) { Add-Todo 2 'Read the settings marked in section 2 before an agent or editor opens those folders, and delete anything you didn''t put there yourself. A cloned project can bring these with it.' }
 if ($N_LOOK -gt 0) { Add-Todo 2 'Read the files section 2 lists as named like files worms plant, and delete any you didn''t put there yourself.' }
 # A version to update needs its own fix unless the compromised-machine fix already deletes it (a
