@@ -7961,11 +7961,13 @@ $ActTable = @(
 # <<< actions
 # A uses: is read in a block mapping (- uses: x@v1), with its value on the next line when that line is
 # indented more than the key (uses: on its own, or with | or >), and in a flow mapping ({uses: x@v1}),
-# after the { or a , on a line that has one, a # comment cut off first. As gird-check.sh's act_uses.
+# after the { or a , on a line that has one, a # comment cut off first: a # after a space or tab,
+# outside quotes. A , that ends a value is a flow mapping's written over several lines. As
+# gird-check.sh's act_uses.
 function Act-Use([string]$v) {
   if ($v.Length -gt 0 -and ($v[0] -eq '"' -or $v[0] -eq "'")) {
     $q = $v[0]; $v = $v.Substring(1); $i = $v.IndexOf($q); if ($i -lt 0) { return }; $v = $v.Substring(0, $i)
-  } else { $v = $v -replace '[ \t]+#.*$', '' -replace '[ \t]+$', '' }
+  } else { $v = $v -replace '[ \t]+#.*$', '' -replace '[ \t]+$', '' -replace '[ \t]*,$', '' }
   $at = $v.IndexOf('@'); if ($at -lt 0) { return }
   $a = $v.Substring(0, $at); $r = $v.Substring($at + 1)
   if ($a -cnotmatch '^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+(/.*)?$' -or $r -eq '' -or $r -match '[ \t]') { return }
@@ -7987,7 +7989,16 @@ function Act-Uses([string]$t) {
       Act-Use $v; continue
     }
     if ($line.IndexOf('{') -lt 0 -or $line -match '^[ \t]*#') { continue }
-    $s = $line; $h = $s.IndexOf(' #'); if ($h -ge 0) { $s = $s.Substring(0, $h) }; $h = $s.IndexOf("`t#"); if ($h -ge 0) { $s = $s.Substring(0, $h) }
+    # The line before its comment: each quote and # found in one pass, a quote opening or closing one
+    # only outside the other kind.
+    $s = $line; $q = ''; $i = 0
+    while (($i = $s.IndexOfAny([char[]]'"''#', $i)) -ge 0) {
+      $c = [string]$s[$i]
+      if ($q) { if ($c -eq $q) { $q = '' } }
+      elseif ($c -ne '#') { $q = $c }
+      elseif ($i -gt 0 -and ($s[$i - 1] -eq ' ' -or $s[$i - 1] -eq "`t")) { $s = $s.Substring(0, $i - 1); break }
+      $i++
+    }
     $c = $s.Split('{')
     for ($i = 1; $i -lt $c.Length; $i++) {
       foreach ($d in $c[$i].Split(',')) {

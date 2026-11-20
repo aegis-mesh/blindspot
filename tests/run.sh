@@ -3808,6 +3808,10 @@ has    "a trivy-action pin to an earlier release is"     '~/code/tvold/\.github/
 GB=$WORK/gb; rm -rf "$GB"; mkdir -p "$GB/code/a/.github/workflows" "$GB/src/github.com/org/repo/.github/workflows" "$GB/a/b/c/d/repo/.github/workflows" \
   "$GB/a/b/c/d/e/repo/.github/workflows" "$GB/AppData/Roaming" "$GB/AppData/Local/Temp"
 printf 'jobs:\n  a:\n    steps:\n      - {uses: tj-actions/changed-files@v40, name: x}\n      - {name: y, uses: "tj-actions/changed-files@v41"}\n      - uses:\n          tj-actions/changed-files@v42\n      # - {uses: tj-actions/changed-files@v43}\n  b:\n    steps: [{uses: actions/checkout@v4}, {uses: tj-actions/changed-files@v44}]\n' > "$GB/code/a/.github/workflows/ci.yml"
+# A # inside a quoted name is not a comment, a quote written twice included, and a flow mapping written
+# over several lines ends its value with a comma; a flow-style step after a quoted name in a comment
+# is still not read.
+printf 'jobs:\n  a:\n    steps:\n      - {name: "Check #1", uses: tj-actions/changed-files@v31}\n      - {name: %s, uses: tj-actions/changed-files@v32}\n      - {name: "x"} # {uses: tj-actions/changed-files@v33}\n      - {\n          name: "Check #3",\n          uses: tj-actions/changed-files@v45.0.7,\n        }\n' "'it''s #2'" > "$GB/code/a/.github/workflows/q.yml"
 for _d in src/github.com/org/repo:v35:yml a/b/c/d/repo:v36:yaml a/b/c/d/e/repo:v37:yml; do
   printf 'jobs:\n  a:\n    steps:\n      - uses: tj-actions/changed-files@%s\n' "$(echo "$_d" | cut -d: -f2)" > "$GB/${_d%%:*}/.github/workflows/ci.$(echo "$_d" | cut -d: -f3)"
 done
@@ -3816,6 +3820,10 @@ has    "a flow-style step is read"                      'Uses tj-actions/changed
 has    "and one whose uses: comes after its name"       'Uses tj-actions/changed-files@v41, compromised' "$GB/out.txt"
 has    "a uses: with its value on the next line is read" 'Uses tj-actions/changed-files@v42, compromised' "$GB/out.txt"
 hasnot "a flow-style step in a comment is not read"     'changed-files@v43' "$GB/out.txt"
+has    "a # inside a quoted name does not cut off the uses: after it" 'Uses tj-actions/changed-files@v31, compromised' "$GB/out.txt"
+has    "nor one in single quotes with a quote written twice" 'Uses tj-actions/changed-files@v32, compromised' "$GB/out.txt"
+hasnot "a flow-style step after a quoted name, in a comment, is not read" 'changed-files@v33' "$GB/out.txt"
+has    "a flow mapping over several lines: the comma after the value is not in the ref" 'Uses tj-actions/changed-files@v45\.0\.7, compromised' "$GB/out.txt"
 has    "a step in a flow sequence is read"              'Uses tj-actions/changed-files@v44, compromised' "$GB/out.txt"
 has    "the workflows of a repo 4 folders down are read" '~/src/github\.com/org/repo/\.github/workflows/ci\.yml Uses tj-actions/changed-files@v35' "$GB/out.txt"
 has    "and those of a repo 5 folders down"             '~/a/b/c/d/repo/\.github/workflows/ci\.yaml Uses tj-actions/changed-files@v36' "$GB/out.txt"
