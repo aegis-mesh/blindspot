@@ -9668,7 +9668,11 @@ EOF
     [ -r "$_pf" ] || { _mv_lost=1; continue; }
     _mvz=$(/usr/bin/stat -L -f %z -- "$_pf" 2>/dev/null); case "$_mvz" in ''|*[!0-9]*) _mv_lost=1; continue ;; esac
     [ "$_mvz" -le "$FLEET_MAX" ] || { _mv_lost=1; continue; }
-    if [ "$_mv_files" -ge 64 ] || [ $((_mv_bytes + _mvz)) -gt 16777216 ]; then _mv_lost=1; break; fi
+    # A cap reached counts as a file not read. fish runs each conf.d file by itself, so one left
+    # unread there counts whatever the files read name, as a conf.d it can't list does.
+    if [ "$_mv_files" -ge 64 ] || [ $((_mv_bytes + _mvz)) -gt 16777216 ]; then
+      _mv_lost=1; case "$NL$_pf$NL$_mv_q" in *"$NL$H/.config/fish/conf.d/"*) _mv_named=1 ;; esac; break
+    fi
     _mv_files=$((_mv_files + 1)); _mv_bytes=$((_mv_bytes + _mvz))
     _mvo=$(MV_NAMES="$_mv_names" MV_H="$H" MV_DFLT="$_mv_dflt" MV_VARS="$_mv_vars" MV_OWN="$_mv_own" awk "$FLEET_MV_AWK" "$_pf" 2>/dev/null) || _mv_lost=1
     while IFS="$TAB" read -r _mvk _mvx _mvy; do

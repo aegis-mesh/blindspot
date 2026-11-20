@@ -652,7 +652,8 @@ asdf's, which set the tool's variable their own way), in the tool's own folder o
 installs them with the whole path written from Homebrew's prefix. A file a profile sources is read
 only when it is a regular file on a local disk: never through a link, or under `/Volumes` or
 `/Network`. The profiles themselves, fish's `conf.d` files and `ZDOTDIR`'s files are read through a
-link, as the shell reads them. At most 64 files and 16 MB in all.
+link, as the shell reads them. At most 64 files and 16 MB in all; a fish `conf.d` file left unread
+past them leaves the account partly checked, as fish runs it by itself.
 
 Some folders outside the home are read by every account's check: npm's global folders in
 `/opt/homebrew/lib` and `/usr/local/lib`, shared Python environments, conda in `/opt`, and the

@@ -5722,6 +5722,15 @@ mkdir -p "$MV/zdot/.zdot" "$MV/zdotok/.zdot"; printf 'export CLAUDE_CONFIG_DIR=/
 } > "$MV/zf0.txt"
 if [ "$(grep -c '=1$' "$MV/zf1.txt")" -eq 3 ] && [ "$(grep -c '=0$' "$MV/zf0.txt")" -eq 2 ]; then ok "fleet: zsh's ZDOTDIR files and fish's conf.d are read like the profiles, and a ZDOTDIR that can't be told counts"
 else bad "fleet: zsh's ZDOTDIR files and fish's conf.d are read like the profiles, and a ZDOTDIR that can't be told counts" "$(cat "$MV/zf1.txt" "$MV/zf0.txt" | tr '\n' ' ')"; fi
+# At most 64 files are read. fish runs every conf.d file by itself, so one left unread at the cap counts
+# whatever the files read name. Files a profile sources past it count only where a listed variable is
+# named, as before: here none is.
+mkdir -p "$MV/fishcap/.config/fish/conf.d" "$MV/srccap/.sh.d"
+for _i in $(seq 10 79); do printf 'set -g x%s 1\n' "$_i" > "$MV/fishcap/.config/fish/conf.d/a$_i.fish"; printf 'alias a%s=ls\n' "$_i" > "$MV/srccap/.sh.d/a$_i.sh"; done
+printf 'set -gx CLAUDE_CONFIG_DIR /d/claude\n' > "$MV/fishcap/.config/fish/conf.d/zz.fish"
+_fc=$({ mv_case fishcap .config/fish/config.fish 'set -g fish_greeting ""'; mv_case srccap .bashrc 'for f in ~/.sh.d/*.sh; do . "$f"; done'; } | tr '\n' ' ')
+if [ "$_fc" = "fishcap=1 srccap=0 " ]; then ok "fleet: fish's conf.d files left unread at the cap count, files a profile sources past it do not"
+else bad "fleet: fish's conf.d files left unread at the cap count, files a profile sources past it do not" "$_fc"; fi
 # Each way a profile can reach a file that moves a folder: from outside the home, two files down, in a
 # loop over a folder's files (bash's and zsh's), through a variable set earlier, and a file placed in
 # a tool's own folder that is not the tool's own script.
