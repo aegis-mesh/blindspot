@@ -4712,6 +4712,18 @@ kill -0 "$_bp" 2>/dev/null && kill -9 "$_bp" 2>/dev/null; wait "$_bp" 2>/dev/nul
 if [ $((_t1 - _t0)) -lt 40 ] && grep -q '^key_files=1$' "$FW/deaf.out" && grep -q '^sessions_partial=1$' "$FW/deaf.out" && grep -q '^end=1$' "$FW/deaf.out"
 then ok "fleet: an account run whose session check does not stop still prints inside its time" "$((_t1 - _t0))s of 40"
 else bad "fleet: an account run whose session check does not stop still prints inside its time" "$((_t1 - _t0))s of 40, $(grep -E '^(key_files|sessions_partial|end)=' "$FW/deaf.out" | tr '\n' ' ')"; fi
+# A session listing that does not end, in the check and when the run would list the files again
+# (GIRD_CHECK_TEST_LIST_HOLD, tests only, as a folder that does not answer would hold it): an account
+# run whose session check was stopped does not list them again, so it prints inside its time, with the
+# key it found and the sessions partly checked. 120 seconds is a safety ceiling.
+fw_home lhold; mkdir -p "$FW/lhold/.claude/projects/p" "$FW/lhold/code/app"; printf '{}\n' > "$FW/lhold/.claude/projects/p/a.jsonl"
+printf 'AWS_ACCESS_KEY_ID=%s\n' "AK""IA$(upper 16)" > "$FW/lhold/code/app/.env"; : > "$FW/lholdf"; _t0=$(date +%s)
+psrun "$FW/lhold" GIRD_CHECK_SESSIONS_ENGINE=net GIRD_CHECK_TEST_LIST_HOLD="$FW/lholdf" -- -AccountRun --account-seconds=40 > "$FW/lhold.out" 2> /dev/null &
+_bp=$!; for _i in $(seq 1 600); do kill -0 "$_bp" 2>/dev/null || break; sleep 0.2; done; _t1=$(date +%s)
+kill -0 "$_bp" 2>/dev/null && kill -9 "$_bp" 2>/dev/null; wait "$_bp" 2>/dev/null; rm -f "$FW/lholdf"
+if [ $((_t1 - _t0)) -lt 40 ] && grep -q '^key_files=1$' "$FW/lhold.out" && grep -q '^sessions_partial=1$' "$FW/lhold.out" && grep -q '^end=1$' "$FW/lhold.out"
+then ok "fleet: an account run whose session listing does not end still prints inside its time" "$((_t1 - _t0))s of 40"
+else bad "fleet: an account run whose session listing does not end still prints inside its time" "$((_t1 - _t0))s of 40, $(grep -E '^(key_files|sessions_partial|end)=' "$FW/lhold.out" | tr '\n' ' ')"; fi
 # A ripgrep that closes its output and never ends does not hold up a run by hand, even with
 # -AllSessions: it gets a while (GIRD_CHECK_TEST_GRACE_MS, tests only) and is stopped, and the
 # sessions are partly checked. 120 seconds is a safety ceiling.

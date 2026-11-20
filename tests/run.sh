@@ -5634,6 +5634,25 @@ nr_is "fleet: not_read counts a workflow it can't read" 1 wf
 nr_is "fleet: not_read counts each file once, however many checks read it" 5 all
 nr_is "fleet: not_read counts a ~/.ssh it can't open and the authorized_keys it may hold" 2 sshc
 chmod 755 "$NR/sshc/.ssh"; chmod -R u+rw "$NR"
+# A session listing that does not end, in the check and when the run would list the files again (the
+# perl engine's held by GIRD_CHECK_TEST_LIST_HOLD, tests only, a pipe nobody writes to, and find by a
+# stand-in that waits while a file is there), as a folder that does not answer would hold both: an
+# account run whose session check was stopped does not list them again, so it prints inside its time,
+# with the key it found and the sessions partly checked. 120 seconds is a safety ceiling.
+if [ -n "$SKIPPING" ]; then skip "fleet: an account run whose session listing does not end still prints inside its time" "$SKIPPING"
+else
+  LH=$FL/lhold; rm -rf "$LH"; mkdir -p "$LH/home/.claude/projects/p" "$LH/home/code/app" "$LH/bin"; printf '{}\n' > "$LH/home/.claude/projects/p/a.jsonl"
+  printf 'AWS_ACCESS_KEY_ID=%s\n' "AK""IA$(upper 16)" > "$LH/home/code/app/.env"; mkfifo "$LH/pipe"; : > "$LH/held"
+  printf '#!/bin/bash\nfor a in "$@"; do case "$a" in */.claude/projects/) while [ -e "%s" ]; do /bin/sleep 0.2; done ;; esac; done\nexec /usr/bin/find "$@"\n' "$LH/held" > "$LH/bin/find"; chmod +x "$LH/bin/find"
+  _t0=$(date +%s)
+  env -i PATH="$LH/bin:/usr/bin:/bin:/usr/sbin:/sbin" HOME="$LH/home" GIRD_CHECK_ACCOUNT_SECONDS=40 GIRD_CHECK_SESSIONS_ENGINE=perl GIRD_CHECK_TEST_LIST_HOLD="$LH/pipe" \
+    /bin/bash "$SCRIPT" --account-run > "$LH/out" 2> /dev/null < /dev/null &
+  _bp=$!; for _i in $(seq 1 600); do kill -0 "$_bp" 2>/dev/null || break; sleep 0.2; done; _t1=$(date +%s)
+  kill -0 "$_bp" 2>/dev/null && kill -9 "$_bp" 2>/dev/null; wait "$_bp" 2>/dev/null; rm -f "$LH/held"
+  if [ $((_t1 - _t0)) -lt 40 ] && grep -q '^key_files=1$' "$LH/out" && grep -q '^sessions_partial=1$' "$LH/out" && grep -q '^end=1$' "$LH/out"
+  then ok "fleet: an account run whose session listing does not end still prints inside its time" "$((_t1 - _t0))s of 40"
+  else bad "fleet: an account run whose session listing does not end still prints inside its time" "$((_t1 - _t0))s of 40, $(grep -E '^(key_files|sessions_partial|end)=' "$LH/out" | tr '\n' ' ')"; fi
+fi
 mkdir -p "$FL/binhome/Library/Safari" "$FL/binhome/.local/bin"; : > "$FL/binhome/.local/bin/aider"; chmod 755 "$FL/binhome/.local/bin/aider"
 users "binhome:$U:$FL/binhome:/bin/zsh"
 fl_run binhome
