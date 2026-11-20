@@ -8000,7 +8000,16 @@ if ($MAL_LOCKONLY -eq 1) {
   if ($N_LOCKPROJ -eq 1) { $lp = 'the project'; $ll = 'its lockfile' } else { $lp = 'the projects'; $ll = 'their lockfiles' }
   Add-Todo 5 "If you ran an install in $lp section 5 lists, treat this machine as compromised: from another computer, rotate every key this machine could reach, then clear npm's cache with npm cache clean --force. If not, update $ll to a version without the malware."
 }
-if ($ExtCheck.Count -gt 0) { Add-Todo 5 'Open the startup file listed in section 5 and check what it starts at login. If you did not set it up yourself, treat this machine as compromised: delete it and rotate every key this machine could reach.' }
+# A startup file named like one of an incident whose own fix starts with "First" (what it leaves must
+# go before any key is rotated, as claudeext's sysmon.cmd on Windows): that fix comes ahead of the rotate.
+if ($ExtCheck.Count -gt 0) {
+  $xf = New-Object System.Collections.Generic.List[string]
+  foreach ($t in ($ExtCheckTags | Sort-Object -CaseSensitive)) { $a = Incident-Advice $t; if ($a.StartsWith('First ', [StringComparison]::Ordinal) -and -not $xf.Contains($a)) { $xf.Add($a) } }
+  if ($xf.Count -gt 0) {
+    $xf[0] = 'f' + $xf[0].Substring(1)
+    Add-Todo 5 "Open the startup file listed in section 5 and check what it starts at login. If you did not set it up yourself, $($xf -join ' ') After that, treat this machine as compromised: delete it and rotate every key this machine could reach."
+  } else { Add-Todo 5 'Open the startup file listed in section 5 and check what it starts at login. If you did not set it up yourself, treat this machine as compromised: delete it and rotate every key this machine could reach.' }
+}
 if ($LITELLM_HIT -eq 0 -and $LitePyc.Count -gt 0) { Add-Todo 5 'A leftover cook.pyc can come from the LiteLLM 1.107.0 malware. If litellm 1.107.0 was ever installed there, treat this machine as compromised, follow LiteLLM''s advisory and rotate every key it could reach.' }
 Add-Advice 'lock'
 Add-Advice 'update'

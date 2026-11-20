@@ -8969,7 +8969,18 @@ if [ "$MAL_LOCKONLY" -eq 1 ]; then
   if [ "$N_LOCKPROJ" -eq 1 ]; then _lp="the project"; _ll="its lockfile"; else _lp="the projects"; _ll="their lockfiles"; fi
   todo 5 "If you ran an install in $_lp section 5 lists, treat this machine as compromised: from another computer, rotate every key this machine could reach, then clear npm's cache with npm cache clean --force. If not, update $_ll to a version without the malware."
 fi
-[ -n "$EXT_CHECK" ] && todo 5 "Open the startup file listed in section 5 and check what it starts at login. If you did not set it up yourself, treat this machine as compromised: delete it and rotate every key this machine could reach."
+# A startup file named like one of an incident whose own fix starts with "First" (what it leaves must
+# go before any key is rotated, as claudeext's sysmon.cmd on Windows): that fix comes ahead of the rotate.
+if [ -n "$EXT_CHECK" ]; then
+  _xf=""
+  for _t in $EXT_CHECK_TAGS; do
+    _a=$(incident_advice "$_t"); case "$_a" in First\ *) ;; *) continue ;; esac
+    case "$_xf" in *"$_a"*|*"f${_a#F}"*) continue ;; esac
+    if [ -z "$_xf" ]; then _xf="f${_a#F} "; else _xf="$_xf$_a "; fi
+  done
+  if [ -n "$_xf" ]; then todo 5 "Open the startup file listed in section 5 and check what it starts at login. If you did not set it up yourself, ${_xf}After that, treat this machine as compromised: delete it and rotate every key this machine could reach."
+  else todo 5 "Open the startup file listed in section 5 and check what it starts at login. If you did not set it up yourself, treat this machine as compromised: delete it and rotate every key this machine could reach."; fi
+fi
 [ "$LITELLM_HIT" -eq 0 ] && [ -n "$LITE_PYC" ] && todo 5 "A leftover cook.pyc can come from the LiteLLM 1.107.0 malware. If litellm 1.107.0 was ever installed there, treat this machine as compromised, follow LiteLLM's advisory and rotate every key it could reach."
 advice_todos lock
 advice_todos update
