@@ -237,8 +237,8 @@ hold it to that:
 The tags fail when the reprint holds a line not on the list (cause `code`), when the folder fails its
 check (`nopath`), or when the block exits non-zero, writes anything to standard error or prints a line
 that is not one `OWASP_TABLE` gives, once and in its order (`rule`). That account is then partly
-checked ("its OWASP tags could not be worked out", `owasp_failed: true` in its row), so it never
-reads clear. The run reads `failed` (exit 13), even when it has findings to act on. The terminal view
+checked ("its OWASP tags could not be worked out", `owasp_failed: true` in its row, with no `owasp`
+list, since an empty one would read as no risk), so it never reads clear. The run reads `failed` (exit 13), even when it has findings to act on. The terminal view
 has a line for each cause, `last.json` lists them in `owasp.failed_because`, and the summary line
 ends with `owasp_failed=<causes>`.
 

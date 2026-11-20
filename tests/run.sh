@@ -6155,7 +6155,7 @@ else bad "fleet: an empty search-path folder only root's stand-in can change giv
 nop_fails() { # FOLDER: 0 when a run with it as the search-path folder reads failed and says why; else OW_WHY says why
   GIRD_CHECK_FLEET_NOPATH=$1 fl_run nop
   OW_WHY="$(cat "$FL/nop.rc") $(grep -E '^(outcome|owasp\.failed_because|first\.(outcome|owasp_failed))=' "$FL/nop.flat" | tr '\n' ' ')"
-  grep -q '^13$' "$FL/nop.rc" && grep -q '^outcome=failed$' "$FL/nop.flat" && grep -q '^first\.outcome=not_checked$' "$FL/nop.flat" && grep -q '^first\.owasp_failed=true$' "$FL/nop.flat" \
+  grep -q '^13$' "$FL/nop.rc" && grep -q '^outcome=failed$' "$FL/nop.flat" && grep -q '^first\.outcome=not_checked$' "$FL/nop.flat" && grep -q '^first\.owasp_failed=true$' "$FL/nop.flat" && ! grep -q '^first\.owasp=' "$FL/nop.flat" \
     && grep -q '^owasp\.failed_because=nopath$' "$FL/nop.flat" && grep -q '^  The run failed: no OWASP tags were worked out, as .* is not an empty folder only root can change\.$' "$FL/nop.out"
 }
 if nop_fails "$NOP/link"; then ok "fleet: a search-path folder that is a link makes the run failed"; else bad "fleet: a search-path folder that is a link makes the run failed" "$OW_WHY"; fi
