@@ -320,7 +320,7 @@ function Provider-Id([string]$n) { switch -CaseSensitive ($n) { 'Anthropic' { 'a
 # <<< keys
 # >>> public-values: generated from data/public-values.tsv by tools/gen.sh. Edit that file, then run it.
 $PublicValuesFn = @'
-function Is-Public([string]$k) { $false -or $k.Contains('Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50u') -or $k.Contains('19874698323-pdFZKVeTuE8sk7oOcBrzbqgy') -or $k.Contains('N7UND0UgjKTVK-Uodkm0Hg') -or $k.Contains('C2y6yDjf5/R+ob0N8A7Cgv30VRDJIWEHLM+4QDU5') }
+function Is-Public([string]$k) { $false -or $k.Contains('Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50u') -or $k.Contains('19874698323-pdFZKVeTuE8sk7oOcBrzbqgy') -or $k.Contains('N7UND0UgjKTVK-Uodkm0Hg') -or $k.Contains('C2y6yDjf5/R+ob0N8A7Cgv30VRDJIWEHLM+4QDU5') -or $k.Contains('MfKQ9r8GKYqrTwjUPD8ILPZIo2LaLaSw') -or $k.Contains('5WbX5kEWLlfzsGNjH64I8lOOqUB6e8FH') }
 '@
 # <<< public-values
 # Agent sessions and JSON configs, where a key often follows an escape such as \n: a backslash escape

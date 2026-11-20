@@ -917,7 +917,7 @@ prov_id() { case "$1" in "Anthropic") printf anthropic ;; "OpenRouter") printf o
 # <<< keys
 # >>> public-values: generated from data/public-values.tsv by tools/gen.sh. Edit that file, then run it.
 PUBLIC_AWK='
-function public(k) { return 0 || index(k, "Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50u") || index(k, "19874698323-pdFZKVeTuE8sk7oOcBrzbqgy") || index(k, "N7UND0UgjKTVK-Uodkm0Hg") || index(k, "C2y6yDjf5/R+ob0N8A7Cgv30VRDJIWEHLM+4QDU5") }'
+function public(k) { return 0 || index(k, "Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50u") || index(k, "19874698323-pdFZKVeTuE8sk7oOcBrzbqgy") || index(k, "N7UND0UgjKTVK-Uodkm0Hg") || index(k, "C2y6yDjf5/R+ob0N8A7Cgv30VRDJIWEHLM+4QDU5") || index(k, "MfKQ9r8GKYqrTwjUPD8ILPZIo2LaLaSw") || index(k, "5WbX5kEWLlfzsGNjH64I8lOOqUB6e8FH") }'
 # <<< public-values
 # Agent sessions and JSON configs, where a key often follows an escape such as \n: a backslash escape
 # also counts as the boundary in front of a key, in every file the checks read.

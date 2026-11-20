@@ -179,6 +179,9 @@ def public_cases(pv):
             out.append((i, 'DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;Account' 'Key=' + part + b64n(86 - len(part)) + '==;'))
         elif i == 'slack':
             out.append((i, 'xo' 'xb-17653672481-' + part))
+        elif i == 'stripe':
+            # A Standard Webhooks signing secret from Svix's docs, which has Stripe's whsec_ start.
+            out.append((i, 'wh' 'sec_' + part))
         elif i == 'supabase':
             # Supabase CLI's local secret key: 22 characters, _ and an 8-character checksum.
             out.append((i, 'sb' '_secret_' + part + '_' + r(AN, 8)))

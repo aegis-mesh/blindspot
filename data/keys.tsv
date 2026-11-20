@@ -55,8 +55,11 @@
 # Databricks dapi and 32 hex (Microsoft Purview's Databricks token definition, SEC101/110); Slack's
 # xoxb-, xoxp-, xapp- and xoxe.xapp- and its incoming webhook address (docs.slack.dev, tokens and
 # incoming webhooks); Stripe's sk_live_, rk_live_ and whsec_ (docs.stripe.com, keys and webhook
-# signatures); SendGrid's 69 characters (twilio.com SendGrid API keys); PyPI's pypi- and a base64
-# macaroon whose location is pypi.org (docs.pypi.org, secrets), which can pass 300 characters;
+# signatures; whsec_ also starts a Standard Webhooks signing secret, standardwebhooks.com, which Svix
+# and the services that send webhooks through it issue as whsec_ and base64: one with no + or / in it is
+# named Stripe, and one with them is missed); SendGrid's 69 characters (twilio.com SendGrid API keys);
+# PyPI's pypi- and a base64 macaroon whose location is pypi.org (docs.pypi.org, secrets), which can pass
+# 300 characters;
 # Sentry's sntryu_ and sntrys_ formats (docs.sentry.io, token formats); Supabase's sb_secret_
 # (supabase.com, API keys). The vendors document the start but not the length of GitLab's glpat-,
 # gldt-, glrt-, glft- and glsoat- (docs.gitlab.com, token prefixes; a personal access token is 20
