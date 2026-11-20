@@ -1174,6 +1174,9 @@ has    "and ones after VAR=value" '! ~/code/w/p A session-start hook and a folde
 hasnot "an echo that names those words runs nothing" '~/code/w9 A session-start hook' "$WORK/wst.txt"
 has    "the worm-style startup projects are listed in byte order of their paths" '! ~/code/w-1 A session-start hook.* ! ~/code/w\.2 A session-start hook.* ! ~/code/w/p A session-start hook.* ! ~/code/w_3 A session-start hook' "$WORK/wst.txt"
 has    "What to do says to read those scripts before it says to move and rotate keys" 'Read the script each project in section 2 starts the way worms do.*Move keys out of shell profiles, history and \.env files' "$WORK/wst-todo.txt"
+has    "and to read the settings section 2 marks before that too" 'Read the settings marked in section 2 before an agent or editor opens those folders.*Move keys out of shell profiles, history and \.env files' "$WORK/wst-todo.txt"
+sed -n '/Project settings that act/,/^ *$/p' "$WORK/wst-raw.txt" | tr -s ' \n' '  ' > "$WORK/wst-auto.txt"
+has    "the project settings that act on opening are listed in byte order of their paths" '! ~/code/w-1/\.claude/settings\.json .*! ~/code/w-1/\.vscode/tasks\.json .*! ~/code/w\.2/\.claude/settings\.json .*! ~/code/w\.2/\.vscode/tasks\.json .*! ~/code/w/p/\.claude/settings\.json .*! ~/code/w/p/\.vscode/tasks\.json .*! ~/code/w9/\.claude/settings\.json .*! ~/code/w9/\.vscode/tasks\.json .*! ~/code/w_3/\.claude/settings\.json .*! ~/code/w_3/\.vscode/tasks\.json ' "$WORK/wst-auto.txt"
 # The same words before a planted file make worm-style startup in a project: a hook in a subshell and a
 # task in bash -c's code, and a hook after timeout and a task after setsid.
 mkdir -p "$WORK/wsw/code/s1/.claude" "$WORK/wsw/code/s1/.vscode" "$WORK/wsw/code/s2/.claude" "$WORK/wsw/code/s2/.vscode"
@@ -1640,7 +1643,9 @@ HOME="$WORK/npmno" PATH=/usr/bin:/bin bash "$SCRIPT" --offline 2>&1 | tr -s ' \n
 chmod 644 "$WORK/npmno/.npm/_cacache/index-v5/aa/0e9"
 has    "an unreadable index file is not called clean"  "npm malware not fully checked: part of npm's cache could not be read" "$WORK/npmno3.txt"
 awk '/WHAT TO DO/{f=1} f' "$WORK/rv.txt" | tr -s ' \n' '  ' > "$WORK/rv-todo.txt"
-if awk '{ a = index($0, "Delete the saved Claude Code commands"); b = index($0, "Read the settings marked"); exit !(a && b && a < b) }' "$WORK/rv-todo.txt"; then ok "a red allow-list fix comes before the yellow settings fix"; else bad "a red allow-list fix comes before the yellow settings fix"; fi
+# Opening a project to delete a saved command runs its folder-open task, so reading the settings
+# section 2 marks comes first, ahead of that fix's rotate.
+if awk '{ a = index($0, "Read the settings marked"); b = index($0, "Delete the saved Claude Code commands"); exit !(a && b && a < b) }' "$WORK/rv-todo.txt"; then ok "the settings fix comes before the allow-list fix, which rotates keys"; else bad "the settings fix comes before the allow-list fix, which rotates keys"; fi
 # Wiper: Linux steps, and every other rotate waits for it.
 cp -R "$WORK/home" "$WORK/wl"; mkdir -p "$WORK/fakebin"
 printf '#!/bin/sh\nif [ "$1" = -s ]; then echo Linux; else exec /usr/bin/uname "$@"; fi\n' > "$WORK/fakebin/uname"; chmod +x "$WORK/fakebin/uname"
