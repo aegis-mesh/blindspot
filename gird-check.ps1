@@ -777,7 +777,7 @@ $AaFiles = New-Object System.Collections.Generic.List[string]
 $VscSettings = New-Object System.Collections.Generic.List[string]
 $AkLinks = New-Object System.Collections.Generic.List[string]
 $Sites = New-Object System.Collections.Generic.List[string]
-# Folders the scan could not read: the files in them were not checked (sections 2 to 5 say so).
+# Folders the scan could not read: the files in them were not checked (sections 1 to 5 say so).
 $UnreadDirs = New-Object System.Collections.Generic.List[string]
 $script:ScanN = 0
 function Is-Pruned([string]$path, [string]$name, [int]$depth) {
@@ -8650,11 +8650,11 @@ if ($Act) {
 }
 $HeadShort = Take-Cap
 Wrap $Stats 4 "  $Sev$gBar$cRst " "  $Sev$gBar$cRst " $cDim
-# Folders the home scan could not read, so sections 2 to 5 did not read the files in them.
+# Folders the home scan could not read, so sections 1 to 5 did not read the files in them.
 function Dir-List($dirs) { $da = @($dirs); $dl = (@($da | Select-Object -First 3 | ForEach-Object { Short $_ })) -join ', '; if ($da.Count -gt 3) { $dl += " and $($da.Count - 3) more" }; $dl }
 if ($UnreadDirs.Count -gt 0) {
-  if ($UnreadDirs.Count -eq 1) { $udText = '1 folder in your home could not be read, so sections 2 to 5 did not check the files in it' }
-  else { $udText = "$($UnreadDirs.Count) folders in your home could not be read, so sections 2 to 5 did not check the files in them" }
+  if ($UnreadDirs.Count -eq 1) { $udText = '1 folder in your home could not be read, so sections 1 to 5 did not check the files in it' }
+  else { $udText = "$($UnreadDirs.Count) folders in your home could not be read, so sections 1 to 5 did not check the files in them" }
   Wrap "$($udText): $(Dir-List $UnreadDirs)." 4 "  $cYel$gBar$cRst " "  $cYel$gBar$cRst " $cYel
 }
 if ($OwCodes) { Blank; Emit "   ${cBold}OWASP Agentic Top 10:$cRst $OwCodes" }
@@ -8751,7 +8751,7 @@ if ($N_LOOK -gt 0) {
   Emit "     ${cBold}Files named like the ones worms plant$cRst"
   foreach ($f in $WormLook) {
     Emit "     $cYel!$cRst  $(Short $f)"
-    Wrap "Named like $(Planted-Note (Planted-Rel $f)), with nothing else of theirs beside it. If you didn't put it there, read it before an agent or editor opens this folder." 8 '        ' '        ' $cDim
+    Wrap "Named like $(Planted-Note (Planted-Rel $f)), but no file that only the malware uses is beside it. If you didn't put it there, read it before an agent or editor opens this folder." 8 '        ' '        ' $cDim
   }
 }
 if ($N_AK -gt 0) {
@@ -9097,9 +9097,16 @@ function CLine([string]$num, [string]$mark, [string]$label, [string]$detail) {
 # An update-level incident with a fix of its own has a summary for row 05 (data/incidents.tsv).
 $UpdSum = ''
 foreach ($t in $NpmTags) { if ((Incident-Level $t) -ne 'update') { continue }; $us = Incident-Summary $t; if ($us) { $UpdSum = $us; break } }
+# A settings or rules file section 1 reads for its findings that is there but was not read, or a rules
+# file not read in full: section 2 names it, and row 01 does not read clean over it.
+$ruleUnread = New-Object System.Collections.Generic.List[string]
+foreach ($f in (Unread-Files (@($aaTried) + @($rcTried)) $true)) { if (-not $ruleUnread.Contains($f)) { $ruleUnread.Add($f) } }
+foreach ($f in $rcCuts) { if ($f -and -not $ruleUnread.Contains($f)) { $ruleUnread.Add($f) } }
+$N_RULE_UNREAD = $ruleUnread.Count
 if ($N_OLD -gt 0) { $G1 = "$cYel!$cRst"; $D1 = "$N_AG found, $(Plural $N_OLD 'security fix' 'security fixes') to install" }
 elseif ($N_YOLO -gt 0) { $G1 = "$cYel!$cRst"; $D1 = "$N_AG found, $N_YOLO_AG set to run commands without asking" }
 elseif ($N_REMOTE -gt 0) { $G1 = "$cYel!$cRst"; $D1 = "$N_AG found, $N_REMOTE_AG allowed to run commands on other machines" }
+elseif ($N_RULE_UNREAD -gt 0) { $G1 = "$cYel!$cRst"; $D1 = "$N_AG found, but $(Plural $N_RULE_UNREAD 'settings file' 'settings files') could not be read" }
 elseif ($N_AG -eq 0) { $G1 = "$cDim$gMid$cRst"; $D1 = 'none found' }
 elseif ($N_IDLE -gt 0) { $G1 = "$cYel$gRing$cRst"; $D1 = "$N_AG found, $N_IDLE idle: $(First-Names $IdleNames 2)" }
 else { $G1 = "$cGrn$gOk$cRst"; $D1 = "$N_AG found, all used in the last 30 days" }

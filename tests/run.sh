@@ -938,7 +938,7 @@ printf 'console.log("tool ready")\n' > "$WORK/msx/code/tool/.claude/execution.js
 printf '{"hooks":{"SessionStart":[{"hooks":[{"type":"command","command":"node .claude/execution.js"}]}]}}\n' > "$WORK/msx/code/tool/.claude/settings.json"
 HOME="$WORK/msx" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/msx.txt"
 hasnot "a lone .claude/execution.js that is not the payload is not malware" 'ACT NOW|signs of npm malware|Treat this machine as compromised|runs a file' "$WORK/msx.txt"
-has    "it is a file to read, named for the Mini Shai-Hulud worm" '! ~/code/tool/\.claude/execution\.js Named like a file the Mini Shai-Hulud worm plants, with nothing else of theirs beside it\.' "$WORK/msx.txt"
+has    "it is a file to read, named for the Mini Shai-Hulud worm" '! ~/code/tool/\.claude/execution\.js Named like a file the Mini Shai-Hulud worm plants, but no file that only the malware uses is beside it\.' "$WORK/msx.txt"
 _es=$({ grep '^planted_sha()' "$SCRIPT"; echo 'planted_sha x/.claude/execution.js'; } | bash)
 if [ "$_es" = 'eb6eb4154b03ec73218727dc643d26f4e14dfda2438112926bb5daf37ae8bcdb 6f933d00b7d05678eb43c90963a80b8947c4ae6830182f89df31da9f568fea95 80a3d2877813968ef847ae73b5eeeb70b9435254e74d7f07d8cf4057f0a710ac' ]; then ok "execution.js counts by the three SHA-256 values Wiz publishes for its payload"
 else bad "execution.js counts by the three SHA-256 values Wiz publishes for its payload" "got: $_es"; fi
@@ -959,7 +959,7 @@ has    "the AntV wave's kitty-monitor service is a sign of its malware" '~/\.con
 has    "and its LaunchAgent"                           '~/Library/LaunchAgents/com\.user\.kitty-monitor\.plist starts the AntV wave.s kitty-monitor backdoor at login' "$WORK/akm.txt"
 has    "and the backdoor they start"                   '~/\.local/share/kitty/cat\.py the AntV wave.s kitty-monitor backdoor, which its service starts at login' "$WORK/akm.txt"
 has    "and the payload copy that the hooks it adds run" '~/\.codex/package/index\.js a copy of the AntV wave.s payload, run by the hooks it adds to agent settings' "$WORK/akm.txt"
-has    "a lone .claude/index.js is a file to read, named for the AntV wave" '! ~/code/i/\.claude/index\.js Named like a file the AntV wave plants, with nothing else of theirs beside it\.' "$WORK/akm.txt"
+has    "a lone .claude/index.js is a file to read, named for the AntV wave" '! ~/code/i/\.claude/index\.js Named like a file the AntV wave plants, but no file that only the malware uses is beside it\.' "$WORK/akm.txt"
 hasnot "index.js in another folder is not listed"      'code/j/' "$WORK/akm.txt"
 # A project can run its own script when an agent session starts or the folder opens, as popular projects
 # do: the report names the script, to check, never as malware. A session-start hook and a folder-open task
@@ -1099,7 +1099,7 @@ printf 'console.log("project ready")\n' > "$WORK/stp/code/tool/.claude/setup.mjs
 printf '{\n  "hooks": {\n    "SessionStart": [{"hooks": [{"type": "command", "command": "node .claude/setup.mjs"}]}]\n  }\n}\n' > "$WORK/stp/code/tool/.claude/settings.json"
 HOME="$WORK/stp" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/stp.txt"
 hasnot "a setup.mjs alone is not called malware" 'ACT NOW|signs of npm malware|Treat this machine as compromised|runs a file' "$WORK/stp.txt"
-has    "section 2 lists it as a file to read (1)" '! ~/code/site/\.vscode/setup\.mjs Named like a file the TanStack, keyv and Mini Shai-Hulud worms plant, with nothing else of theirs beside it\.' "$WORK/stp.txt"
+has    "section 2 lists it as a file to read (1)" '! ~/code/site/\.vscode/setup\.mjs Named like a file the TanStack, keyv and Mini Shai-Hulud worms plant, but no file that only the malware uses is beside it\.' "$WORK/stp.txt"
 has    "section 2 lists it as a file to read (2)" '! ~/code/tool/\.claude/setup\.mjs Named like a file the TanStack, keyv and Mini Shai-Hulud worms plant' "$WORK/stp.txt"
 has    "with a fix to read it"                        'Read the files section 2 lists as named like files worms plant, and delete any you' "$WORK/stp.txt"
 rm -rf "$WORK/stp/code/tool"
@@ -1350,7 +1350,7 @@ has    "a linked .vscode/settings.json is read" '~/p/lnk/\.vscode/settings\.json
 has    "a .claude folder that is a link is read through" '~/p/cdir/\.claude/settings\.json Set to run commands while the agent works' "$WORK/hid.txt"
 has    "and a worm file in it is found" '~/p/cdir/\.claude/router_runtime\.js a file the TanStack and Mini Shai-Hulud worms plant' "$WORK/hid.txt"
 has    "a .vscode folder that is a link is read through" '~/p/vdir/\.vscode/tasks\.json Set to run a task when the folder opens' "$WORK/hid.txt"
-has    "a linked .claude folder that can't be entered is named as not read" '1 folder in your home could not be read, so sections 2 to 5 did not .*the files in it: ~/p/sealed/\.claude\.' "$WORK/hid.txt"
+has    "a linked .claude folder that can't be entered is named as not read" '1 folder in your home could not be read, so sections 1 to 5 did not .*the files in it: ~/p/sealed/\.claude\.' "$WORK/hid.txt"
 hasnot "a .claude link to nothing reads as nothing" 'p/gone/' "$WORK/hid.txt"
 # VS Code reads a task's runOn without case, and runs worktreeCreated tasks when it creates a worktree
 # of the project. Its JSON scanner ends a // comment at U+2028 and U+2029 too, and reads a no-break
@@ -3546,7 +3546,7 @@ has    "made-up Python package: the link flags it"    '&ll=0&.*&py=1&' "$WORK/mu
 has    "made-up planted file and its note"            '~/code/made/\.vscode/madeplant\.js a file the Made worm plants' "$WORK/mu.txt"
 has    "a hook that runs it, with the general note"   '~/code/made/\.claude/settings\.json runs a file a worm plants' "$WORK/mu.txt"
 has    "a made-up planted file with its published SHA-256 counts on its own" '~/code/made/hash/\.claude/madeboot\.mjs a file the Made worm plants' "$WORK/mu.txt"
-has    "and the same name with other contents is a file to read" '! ~/code/made/plain/\.claude/madeboot\.mjs Named like a file the Made worm plants, with nothing else of theirs beside it' "$WORK/mu.txt"
+has    "and the same name with other contents is a file to read" '! ~/code/made/plain/\.claude/madeboot\.mjs Named like a file the Made worm plants, but no file that only the malware uses is beside it' "$WORK/mu.txt"
 has    "made-up Python package: its own row"          'Madepkg 9\.9\.9 +signs of the malware found ~/code/venv/lib/site-packages: madepkg 9\.9\.9, madepy_boot\.pth ~/tmp/\.madepy_1 ' "$WORK/mu.txt"
 has    "made-up Python incident: its startup file is in its row, with its note" 'Madepkg 9\.9\.9 +signs of the malware found .*~/\.config/madepy/boot\.py the Madepkg backdoor, started at login' "$WORK/mu.txt"
 if [ "$(grep -o 'madepy/boot\.py' "$WORK/mu.txt" | grep -c .)" -eq 1 ]; then ok "and it is not listed as npm malware too"; else bad "and it is not listed as npm malware too"; fi
@@ -4192,12 +4192,17 @@ chmod 000 "$WORK/ud/code/locked"
 HOME="$WORK/ud" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/ud.txt"
 HOME="$WORK/ud" GIRD_CHECK_COMPACT=1 bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/ud-c.txt"
 chmod 755 "$WORK/ud/code/locked"
-has    "an unreadable folder is named as not checked" '1 folder in your home could not be read, so sections 2 to 5 did not .*the files in it: ~/code/locked\.' "$WORK/ud.txt"
+has    "an unreadable folder is named as not checked" '1 folder in your home could not be read, so sections 1 to 5 did not .*the files in it: ~/code/locked\.' "$WORK/ud.txt"
 has    "and the npm row is not green"                 'npm malware not fully checked: some folders in your home could not be read' "$WORK/ud.txt"
 has    "and the keys row is not green"                'Keys in plain text none found, but some folders were not read' "$WORK/ud-c.txt"
 has    "and the allow lists row is not green"         'Allow lists none found, but some folders were not read' "$WORK/ud-c.txt"
 has    "and the leaks row is not green"               'Recent leaks none found, but some folders were not read' "$WORK/ud-c.txt"
 has    "and the Python rows are not green"            '! LiteLLM 1\.107\.0 no signs in [0-9]+ Python environments?, but some folders in your home were not read' "$WORK/ud.txt"
+# A rules file section 1 reads, there but unreadable: row 01, where its findings show, is not green.
+rm -rf "$WORK/ur"; cp -R "$WORK/clean" "$WORK/ur"; mkdir -p "$WORK/ur/.codex/rules"
+printf 'prefix_rule(pattern = ["ls"], decision = "allow")\n' > "$WORK/ur/.codex/rules/default.rules"; chmod 000 "$WORK/ur/.codex/rules/default.rules"
+HOME="$WORK/ur" GIRD_CHECK_COMPACT=1 bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/ur-c.txt"; chmod 644 "$WORK/ur/.codex/rules/default.rules"
+has    "an unreadable rules file: the agents row is not green" 'Coding agents +[0-9]+ found, but 1 settings file could not be read' "$WORK/ur-c.txt"
 hasnot "and the headline does not call the scan clean" 'NO FINDINGS IN THIS SCAN' "$WORK/ud-c.txt"
 # Poetry's, pipenv's and Hatch's own folders of environments, which the home scan does not enter, are
 # read: each holds a bad version here. A site-packages folder that can't be read is not counted as an
@@ -4309,7 +4314,7 @@ chmod 000 "$WORK/ud/code/locked"
 HOME="$WORK/ud" TMPDIR="$WORK/no-such-folder" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/ud-t.txt"
 HOME="$WORK/ud" PATH="$WORK/nomk:/usr/bin:/bin" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/ud-nt.txt"
 chmod 755 "$WORK/ud/code/locked"
-has    "a TMPDIR that can't be written to still names the folder" '1 folder in your home could not be read, so sections 2 to 5 did not .*the files in it: ~/code/locked\.' "$WORK/ud-t.txt"
+has    "a TMPDIR that can't be written to still names the folder" '1 folder in your home could not be read, so sections 1 to 5 did not .*the files in it: ~/code/locked\.' "$WORK/ud-t.txt"
 has    "with no temp folder, the scan says it could not tell" 'No temp folder could be written to, so the home scan could not tell .*which folders it could not read' "$WORK/ud-nt.txt"
 has    "and the rows it feeds are not green either"   'npm malware not fully checked: some folders in your home could not be read' "$WORK/ud-nt.txt"
 # A folder whose name holds a line break is not entered, so no part of a path under it is taken for a
@@ -4318,7 +4323,7 @@ rm -rf "$WORK/nl"; mkdir -p "$WORK/nl/code/proj${_nl}x"
 printf '{"lockfileVersion":3,"packages":{"node_modules/axios":{"version":"1.14.1","resolved":"https://registry.npmjs.org/axios/-/axios-1.14.1.tgz"}}}\n' > "$WORK/nl/code/proj${_nl}x/package-lock.json"
 HOME="$WORK/nl" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/nl.txt"
 HOME="$WORK/nl" GIRD_CHECK_COMPACT=1 bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/nl-c.txt"
-has    "a folder with a line break in its name is named as not checked" '1 folder has a line break in its name, so sections 2 to 5 did not .*the files in it: ~/code/proj\?x,' "$WORK/nl.txt"
+has    "a folder with a line break in its name is named as not checked" '1 folder has a line break in its name, so sections 1 to 5 did not .*the files in it: ~/code/proj\?x,' "$WORK/nl.txt"
 has    "and the rows it feeds are not green"          'Recent leaks none found, but some folders were not read' "$WORK/nl-c.txt"
 hasnot "and the headline does not call that scan clean" 'NO FINDINGS IN THIS SCAN' "$WORK/nl-c.txt"
 

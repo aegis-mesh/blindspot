@@ -9651,7 +9651,7 @@ fi
 [ "$SCAN_FAILED" -eq 1 ] && wrap "The home folder was not scanned ($SCAN_WHY): project .env files, settings, MCP configs and lockfiles were not read. Sections 2 to 5 cover only the known agent paths."
 HEAD_SHORT=$CAP; CAP=""
 wrap "$STATS" 4 "  ${SEV}▌${RST} " "  ${SEV}▌${RST} " "$DIM" 4 "  ${YEL}▌${RST} " "  ${YEL}▌${RST} " "$YEL"
-# Folders the home scan could not enter, so sections 2 to 5 did not read the files in them.
+# Folders the home scan could not enter, so sections 1 to 5 did not read the files in them.
 dir_list() { # paths, one a line: the first three as short() shows them, then how many more
   _dl=""; _dn=0
   while IFS= read -r _d; do
@@ -9664,16 +9664,16 @@ EOF
   printf '%s' "$_dl"
 }
 if [ "$N_UNREAD_DIRS" -gt 0 ]; then
-  if [ "$N_UNREAD_DIRS" -eq 1 ]; then _it="1 folder in your home could not be read, so sections 2 to 5 did not check the files in it"
-  else _it="$N_UNREAD_DIRS folders in your home could not be read, so sections 2 to 5 did not check the files in them"; fi
+  if [ "$N_UNREAD_DIRS" -eq 1 ]; then _it="1 folder in your home could not be read, so sections 1 to 5 did not check the files in it"
+  else _it="$N_UNREAD_DIRS folders in your home could not be read, so sections 1 to 5 did not check the files in them"; fi
   wrap "$_it: $(dir_list "$UNREAD_DIRS")." 4 "  ${YEL}▌${RST} " "  ${YEL}▌${RST} " "$YEL"
 fi
 if [ "$SCAN_LOST" -eq 1 ]; then
-  wrap "No temp folder could be written to, so the home scan could not tell which folders it could not read, and sections 2 to 5 may have missed files in them." 4 "  ${YEL}▌${RST} " "  ${YEL}▌${RST} " "$YEL"
+  wrap "No temp folder could be written to, so the home scan could not tell which folders it could not read, and sections 1 to 5 may have missed files in them." 4 "  ${YEL}▌${RST} " "  ${YEL}▌${RST} " "$YEL"
 fi
 if [ "$N_NL_DIRS" -gt 0 ]; then
-  if [ "$N_NL_DIRS" -eq 1 ]; then _it="1 folder has a line break in its name, so sections 2 to 5 did not check the files in it"
-  else _it="$N_NL_DIRS folders have a line break in their name, so sections 2 to 5 did not check the files in them"; fi
+  if [ "$N_NL_DIRS" -eq 1 ]; then _it="1 folder has a line break in its name, so sections 1 to 5 did not check the files in it"
+  else _it="$N_NL_DIRS folders have a line break in their name, so sections 1 to 5 did not check the files in them"; fi
   wrap "$_it: $(dir_list "$NL_DIRS"), the line break shown as ?." 4 "  ${YEL}▌${RST} " "  ${YEL}▌${RST} " "$YEL"
 fi
 if [ -n "$OW_CODES" ]; then blank; emit "   ${B}OWASP Agentic Top 10:${RST} $OW_CODES"; fi
@@ -9815,7 +9815,7 @@ if [ "$N_LOOK" -gt 0 ]; then
   while IFS= read -r f; do
     [ -n "$f" ] || continue
     emit "     ${YEL}!${RST}  $(short "$f")"
-    wrap "Named like $(planted_note "$f"), with nothing else of theirs beside it. If you didn't put it there, read it before an agent or editor opens this folder." 8 "        " "        " "$DIM"
+    wrap "Named like $(planted_note "$f"), but no file that only the malware uses is beside it. If you didn't put it there, read it before an agent or editor opens this folder." 8 "        " "        " "$DIM"
   done <<EOF
 $WORM_LOOK
 EOF
@@ -10391,9 +10391,13 @@ for _t in $NPM_TAGS; do
   [ "$(incident_level "$_t")" = update ] || continue
   _s=$(incident_summary "$_t"); if [ -n "$_s" ]; then UPD_SUM=$_s; break; fi
 done
+# A settings or rules file section 1 reads for its findings that is there but was not read, or a rules
+# file not read in full: section 2 names it, and row 01 does not read clean over it.
+N_RULE_UNREAD=$(count_lines "$({ printf '%s\n%s\n' "$AA_TRIED" "$RC_TRIED" | unread_files big; printf '%s\n' "$RC_CUTS"; } | awk 'length && !s[$0]++')")
 if [ "$N_OLD" -gt 0 ]; then G1="${YEL}!${RST}"; D1="$N_AG found, $(plural "$N_OLD" "security fix" "security fixes") to install"
 elif [ "$N_YOLO" -gt 0 ]; then G1="${YEL}!${RST}"; D1="$N_AG found, $N_YOLO_AG set to run commands without asking"
 elif [ "$N_REMOTE" -gt 0 ]; then G1="${YEL}!${RST}"; D1="$N_AG found, $N_REMOTE_AG allowed to run commands on other machines"
+elif [ "$N_RULE_UNREAD" -gt 0 ]; then G1="${YEL}!${RST}"; D1="$N_AG found, but $(plural "$N_RULE_UNREAD" "settings file" "settings files") could not be read"
 elif [ "$N_AG" -eq 0 ]; then G1="${DIM}·${RST}"; D1="none found"
 elif [ "$N_IDLE" -gt 0 ]; then G1="${YEL}○${RST}"; D1="$N_AG found, $N_IDLE idle: $(first_names "$IDLE_NAMES" 2)"
 else G1="${GRN}✓${RST}"; D1="$N_AG found, all used in the last 30 days"; fi
