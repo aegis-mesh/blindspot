@@ -6,9 +6,14 @@
 #
 # Reads `git diff BASE...HEAD`: the lines HEAD adds or removes since it left BASE, and the paths it
 # changes. Exit 0: nothing found. Exit 1: findings, one per line. Exit 2: it could not check.
+# .github/workflows/review-guard.yml runs it on every pull request. Its check blocks a merge only
+# once main's branch protection makes review-guard a required check; until then a red check is a
+# signal to the reviewer, not a block (CONTRIBUTING.md, Security review).
 #
 # The rules match text, so they flag lines that look like what they name; quoting or splitting a
-# word (e\val, c''url) gets past them, which is why the review checklist still applies. A file is
+# word (e\val, c''url), building a command from pieces or across lines, or a name the lists here
+# do not hold gets past them. It is a backstop for the reviewer, never proof that a change is
+# safe: the review checklist still applies to every line. A file is
 # "data" when it is *.md, *.txt, data/*.tsv, LICENSE or NOTICE; any other file is code, so a kind
 # of file this list does not know is held to the code rules.
 #   hidden    in *.ps1, an added byte that is not printable ASCII, space or tab; in any other file,
@@ -17,7 +22,8 @@
 #             not printable ASCII; a binary file, unless it is a png, jpg, gif or webp image under
 #             docs/ whose first bytes are that kind of image; a file named as an image that is not
 #             one; a symbolic link or a submodule
-#   mode      a file whose mode changed, such as one made executable
+#   mode      a file whose mode changed, such as one made executable (a new file added as
+#             executable has no old mode, so it is not a finding)
 #   run       in code, an added line that runs text as code: eval and its kin; a shell, interpreter
 #             or trap given text built from a variable (sh -c "$x", su -c "$x", PowerShell
 #             -Command "$x", cmd /c "$x"); a here-string or heredoc into a shell, or /dev/stdin;
@@ -35,12 +41,12 @@
 #             image (sh docs/x.png, . notes.txt) is flagged too.
 #   network   in code, an added line that names a network tool where a command starts (after
 #             sudo, timeout, env and the like too, and with its folder or .exe), or a network API
-#             (NET_SH and NET_PS below), comments included; and an http(s) URL in a line
-#             that is not only a # comment, in any code but tests/ and the closed blocks tools/gen.sh
-#             writes from data/ into that file (by the names in gen.sh's own list for it): a URL
-#             in a test is fixture data, and a test that calls out is
-#             caught by the tool it calls with. In *.md, a network tool in a fenced code block,
-#             since people run a doc's commands.
+#             (NET_SH and NET_PS below), comments included; and an http(s) URL in a line that is
+#             not only a # comment, in any code but tests/ and the closed blocks the base's
+#             tools/gen.sh writes from data/ into that file (by the names in gen.sh's own list
+#             for it): a URL in a test is fixture data, and a test that calls out is caught by
+#             the tool it calls with. In *.md, a network tool in a fenced code block, since people
+#             run a doc's commands; a command in a doc's prose or an indented block is not read.
 #   shrink    a removed line in data/*.tsv, other than a # comment or a blank line
 #   protected a change under .github/, to a .gitattributes or .gitmodules file, to this guard, its
 #             decision script or its tests, or, at any depth, to what an AI coding agent, editor or
@@ -51,7 +57,8 @@
 #             .clinerules, .windsurfrules, .roorules, .rules, opencode.json, opencode.jsonc,
 #             .aider.conf.yml, .envrc or .pre-commit-config.yaml. An agent's file that is not in
 #             this list is read as any other file.
-# *.ps1 lines are matched without case, as PowerShell reads them; other code with case.
+# *.ps1 lines are matched without case, as PowerShell reads them; other code with case, but for
+# PowerShell, cmd and running a data file (PSRUN and DATARUN), read without case everywhere.
 set -u
 export LC_ALL=C
 cd "$(dirname "$0")/.." || exit 2

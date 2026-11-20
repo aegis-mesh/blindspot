@@ -90,9 +90,11 @@ Blindspot runs on other people's computers, and in fleet mode as root on every M
 - **Nothing hidden.** No encoded blobs, minified code, binaries or downloaded code. Account for every non-ASCII or control character the change adds, in file contents and file names: invisible and right-to-left characters can make code read differently from how it runs. `gird-check.ps1` stays ASCII, so any such character there is a no. These list them:
 
   ```sh
-  git diff origin/main... | LC_ALL=C grep -n '^+.*[^[:print:][:blank:]]'
-  git diff --name-only origin/main... | LC_ALL=C grep -n '[^ -~]'
+  git diff --text origin/main... | tr '\000' '\001' | LC_ALL=C grep -an '^+.*[^[:print:][:blank:]]'
+  git -c core.quotePath=false diff --name-only -z origin/main... | tr '\0' '\n' | LC_ALL=C grep -n '[^ -~]'
   ```
+
+  `--text` shows files git or `.gitattributes` would call binary (an image under `docs/` included), `tr` turns a NUL into a byte grep shows, and `core.quotePath=false` keeps git from quoting a name into plain ASCII.
 
 - **Runs nothing it reads** (the rule "Runs nothing it finds" above). Look for `eval`, `Invoke-Expression`, `source`, and any command built from a found name or file content. A found name reaches `sh -c` only as an argument, never inside the command text.
 - **Lists match the scripts.** A change to `data/` passes `bash tools/gen.sh --check`, so the scripts carry exactly the lines you reviewed.
@@ -103,14 +105,19 @@ Blindspot runs on other people's computers, and in fleet mode as root on every M
 - **Review what merges.** A new push removes an approval. Review the whole diff again, not only the new commits.
 - **Nothing private.** This repository is public. Code, comments, commits and pull request text name no private repository, server, token or customer.
 
-A required check, the review guard, applies the mechanical part of this review to every pull request: `tools/review-guard.sh` reads the diff, runs none of it, and lists what it finds. It blocks a merge on an added invisible, direction-changing or control character (and any non-ASCII in `gird-check.ps1`), a file name that is not printable ASCII, a binary file other than an image under `docs/`, a link, a submodule or a changed file mode, an added line that looks like it runs text as code or calls the network, a removed line in `data/`, and any change to `.github/`, `.gitattributes`, the guard, or what an AI coding agent, editor or shell opening this repository reads or runs (`.claude/`, `.vscode/`, `.mcp.json`, `AGENTS.md`, `CLAUDE.md`, `.envrc` and the like). The script's header lists the exact rules. They match text, so a line written to dodge them (`e\val`, `c''url`) gets through: the guard is a tripwire, and every point above still applies. A finding is not a verdict. A code owner reads each one and, if the change is sound, checks that the commit the guard's log names is the one they reviewed, then adds the `security-reviewed` label; only that labeling clears the check, and only for that commit. An owner who wrote the pull request can clear the check too, since branch protection still needs the other owner's approval. Any later event on the pull request (a push, an edit, another label) runs the check again and blocks until a code owner adds the label again (removing it first if it is still on), so add it last. The guard and its workflow come from the base branch, so a pull request cannot change the check that judges it; `bash tools/review-guard.sh origin/main HEAD` runs it locally.
+The review guard applies the mechanical part of this review: the `review-guard` check runs on every pull request, and `tools/review-guard.sh` reads the diff, runs none of it, and lists what it finds. It is not a required check yet. After the 1.3.0 release merges, a maintainer makes `review-guard` a required check on `main` and creates the `security-reviewed` label; until both are done, a red guard is a signal to the reviewer, not a block on merging. It flags an added invisible, direction-changing, control or NUL character (and any non-ASCII in `gird-check.ps1`), a file name that is not printable ASCII, a binary file other than an image under `docs/` whose bytes are that kind of image, a link, a submodule or a changed file mode, an added line that looks like it runs text as code or calls the network (in a doc, a network command in a fenced code block), running a file named as data or an image, a removed line in `data/`, and any change to `.github/`, `.gitattributes`, the guard, or a file an AI coding agent, editor or shell opening this repository reads or runs (`.claude/`, `.vscode/`, `.mcp.json`, `AGENTS.md`, `CLAUDE.md`, `.envrc` and the others the script's header lists; an agent file it does not list gets no such finding). The script's header lists the exact rules. They match text, so a line written to dodge them (`e\val`, `c''url`, a command built from pieces) gets through: the guard is a tripwire, a red guard is never proof of harm and a green one never proof of safety, and every point above still applies. A finding is not a verdict. A code owner reads each one and, if the change is sound, adds the `security-reviewed` label; only that labeling clears the check, and only for the pull request's head commit at the moment of labeling. A push between your review and the label would be cleared unread, so after adding it, open the run the label started and confirm its line "This clears commit X only" names the commit you reviewed. If it names another, remove the label, review what changed, and add it again. An owner who wrote the pull request can clear the check too, since branch protection still needs the other owner's approval. Any later event on the pull request (a push, an edit, another label) runs the check again and blocks until a code owner adds the label again (removing it first if it is still on), so add it last. The guard and its workflow come from the base branch, so a pull request cannot change the check that judges it. To run it yourself the same way, without running the pull request's own copy of the guard or reading its `.gitattributes`, fetch its commits and run `main`'s guard from a checkout of `main`:
+
+```sh
+git fetch origin main "pull/N/head:pr-N" && git checkout --detach origin/main
+bash tools/review-guard.sh origin/main pr-N
+```
 
 ## Test
 
 ```sh
 bash tests/run.sh            # builds a fake home folder and checks what the script finds and never prints
 bash tests/interactive.sh    # macOS: drives the game and the menu with expect
-shellcheck -s bash -S warning gird-check.sh gird-fleet.sh tools/release.sh tests/*.sh
+shellcheck -s bash -S warning gird-check.sh gird-fleet.sh tools/review-guard.sh tools/review-guard-decide.sh tools/release.sh tests/*.sh
 PWSH=/path/to/pwsh bash tests/run-ps.sh   # the same checks for gird-check.ps1, under PowerShell 7
 PWSH=/path/to/pwsh bash tests/parity-run.sh   # both suites, then checks every bash test has a twin
 ```
@@ -127,7 +134,7 @@ Add a Developer Certificate of Origin sign-off to each commit with `git commit -
 
 ## Releases
 
-People download only what a maintainer released and signed, never whatever was last merged. A merge to `main` reaches no one until the next release, so when a merge adds an incident or a malware version, cut a release soon after. How releases are signed and checked, and why: [docs/designs/signed-releases.md](docs/designs/signed-releases.md).
+Today gird.ai serves `main`, so a merge reaches everyone who downloads from it, and no release has been signed yet (see the end of this section). Once gird.ai serves signed releases, people download only what a maintainer released and signed, never whatever was last merged: a merge to `main` then reaches no one until the next release, so when a merge adds an incident or a malware version, cut a release soon after. How releases are signed and checked, and why: [docs/designs/signed-releases.md](docs/designs/signed-releases.md).
 
 Every week, and before every release, a maintainer runs `bash tools/check-advisories.sh`. It compares `data/bad-npm.tsv` with OSV.dev (which includes GitHub's malware advisories and the OpenSSF Malicious Packages list) and lists withdrawn entries, versions we flag that nothing names any more, and malicious versions we miss. Treat a MISSING line as a lead: confirm it against a primary source before adding it. It also lists each incident's source to re-read, since a vendor can change what it says an incident did.
 
