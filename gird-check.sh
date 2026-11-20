@@ -1285,7 +1285,7 @@ kubectl exec|exact|in Kubernetes containers
 Invoke-Command|any|on other machines with PowerShell
 Enter-PSSession|any|on other machines with PowerShell'
 RC_FILES="Claude Code|all|claude|agent|${CLAUDE_CONFIG_DIR:-$H/.claude}/settings.json|-
-Claude Code|all|claude|agent|${CLAUDE_CONFIG_DIR:-$H/.claude}/settings.local.json|-
+Claude Code|all|claude|local|${CLAUDE_CONFIG_DIR:-$H/.claude}/settings.local.json|only in sessions you start in your home folder
 Codex|all|codex|agent|${CODEX_HOME:-$H/.codex}/rules/*.rules|-
 Gemini CLI|all|gemini-toml|agent|${GEMINI_CLI_HOME:-$H}/.gemini/policies/*.toml|-
 Gemini CLI|all|gemini-json|agent|${GEMINI_CLI_HOME:-$H}/.gemini/settings.json|-
@@ -2777,7 +2777,12 @@ json_top() { # key
 # Every scalar of a .json file, as path<TAB>value: the path is each key the value sits under, each
 # after a \034 (an array's element adds [] to its key), and a string keeps its quotes and escapes.
 # The file is read as flat reads it and split as aa_keys splits it, one quote and one bracket at a
-# time, the text between on its commas: printed as it is read, linear on every awk.
+# time, the text between on its commas: printed as it is read, linear on every awk. A string is
+# joined from its pieces half at a time, as joining them one at a time is quadratic in its escaped
+# quotes; one longer than 4096 characters keeps its first 4096 and ends in \003, read as a rule with
+# more after them. Whitespace outside strings is dropped with a gsub only on a short chunk (a gsub with
+# many matches is quadratic on macOS's awk): a longer one is read as its first word, and \003 when
+# more follow.
 json_leaves() { # file
   flat "$1" | awk '
     function trail(s) {
@@ -2789,14 +2794,23 @@ json_leaves() { # file
     function flush() { if (sc != "") emit(sc); sc = "" }
     function ob(c,   np) { flush(); np = dep < 1 ? "" : P[dep] (T[dep] == "o" ? "\034" key : "[]"); dep++; P[dep] = np; T[dep] = (c == "{" ? "o" : "a"); ek = (c == "{") }
     function cb() { flush(); if (dep > 0) dep--; ek = 0 }
+    # A chunk without its whitespace. A long one is read as its first word, and \003 when more follow.
+    function nows(s,   w) {
+      if (length(s) <= 64) { gsub(/[[:space:]]/, "", s); return s }
+      if (!match(s, /[^[:space:]]+/)) return ""
+      w = substr(s, RSTART, RLENGTH)
+      return substr(s, RSTART + RLENGTH) ~ /[^[:space:]]/ ? w "\003" : w
+    }
     function text(t,   a, n, i, m) {
       n = split(t, a, ",")
       for (i = 1; i <= n; i++) {
         if (i > 1) { flush(); if (dep > 0 && T[dep] == "o") ek = 1 }
         m = index(a[i], ":"); if (m) { flush(); ek = 0; a[i] = substr(a[i], m + 1) }
-        gsub(/[[:space:]]/, "", a[i]); sc = sc a[i]
+        if (length(sc) < 64) sc = sc nows(a[i])
       }
     }
+    # The pieces a to b of a string, with the quotes between them.
+    function join(a, b,   m) { if (a == b) return q[a]; m = int((a + b) / 2); return join(a, m) "\"" join(m + 1, b) }
     function code(s,   a, b, c, d, na, nb, nc, nd, i, j, k, l) {
       na = split(s, a, "{")
       for (i = 1; i <= na; i++) {
@@ -2815,10 +2829,11 @@ json_leaves() { # file
     }
     { nq = split($0, q, "\""); st = 0; dep = 0; ek = 0; sc = ""; key = ""
       for (i = 1; i <= nq; i++) {
-        if (st == 0) { code(q[i]); if (i < nq) { st = 1; sv = "" }; continue }
-        sv = sv q[i]
-        if (i < nq && trail(q[i]) % 2 == 1) { sv = sv "\""; continue }
+        if (st == 0) { code(q[i]); if (i < nq) { st = 1; qa = i + 1; ln = 0; qb = 0 }; continue }
+        if (!qb) { ln += length(q[i]) + 1; if (ln > 4097) qb = i }
+        if (i < nq && trail(q[i]) % 2 == 1) continue
         st = 0
+        sv = qb ? substr(join(qa, qb), 1, 4096) "\003" : join(qa, i)
         if (dep > 0 && T[dep] == "o" && ek) { key = sv; ek = 0 } else emit("\"" sv "\"")
       }
       flush()
@@ -2892,14 +2907,21 @@ function alts(r, A,   i, n, c, dp, cl, s, k) {
   }
   A[++k] = s; return k
 }
-# An entry, with RC_TAIL or RC_NC (a rule that covers no whole command), RC_RAW (a regex, shown as
-# written) and RC_NOTE (when the rule applies). RC_TAIL and RC_RAW are reset for the next entry.
+# An entry, with RC_TAIL or RC_NC (a rule that covers no whole command), RC_RAW (the rule as written:
+# a regex, or a rule that allows every command, shown so when it holds nothing past the words it
+# shares with the command), RC_NOTE (when the rule applies) and RC_MR (1 when RC_RAW is one of a
+# regex'"'"'s alternatives). RC_TAIL, RC_RAW and RC_MR are reset for the next entry.
 function out(d, r, ci, kd, w,   t) {
   t = (RC_TAIL || RC_NC) ? 1 : 0
-  if (w != "") printf "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n", FID, REP, d, r, ci, kd, w, t, RC_RAW, RC_NOTE
-  RC_TAIL = 0; RC_RAW = ""
+  if (w != "") printf "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n", FID, REP, d, r, ci, kd, w, t, RC_RAW, RC_NOTE, RC_MR + 0
+  RC_TAIL = 0; RC_RAW = ""; RC_MR = 0
 }
-function outrx(d, r, ci, kd, v, sty, raw,   A, n, k, w) { n = alts(v, A); gsub(/[\t\r\n]/, " ", raw); for (k = 1; k <= n; k++) { w = fixed(A[k], sty); RC_RAW = substr(raw, 1, 256); out(d, r, ci, kd, w) } }
+function outrx(d, r, ci, kd, v, sty, raw,   A, n, k, w, x) {
+  n = alts(v, A); gsub(/[\t\r\n]/, " ", raw)
+  for (k = 1; k <= n; k++) { w = fixed(A[k], sty); x = A[k]; gsub(/[\t\r\n]/, " ", x); RC_RAW = n > 1 ? x : substr(raw, 1, 256); RC_MR = n > 1; out(d, r, ci, kd, w) }
+}
+# A file not read in full: one cut line for it.
+function rccut() { if (!RC_CT) printf "%s\t%s\tcut\t0\t0\t\t*\n", FID, REP; RC_CT = 1 }
 '
 # The rules of one agent file, as fid<TAB>rep<TAB>decision<TAB>rank<TAB>case<TAB>kind<TAB>words lines
 # for rc_run (decision allow, ask, deny, or cut for a file not read in full). A deny or ask rule
@@ -2914,16 +2936,23 @@ rc_read() { # file format fid rep
         return length(s)
       }
       function cut() { if (!ct) printf "%s\t%s\tcut\t0\t0\t\t*\n", FID, REP; ct = 1 }
-      # A rule ends: its words up to its first list, then each of that list, then any words.
-      function done(   w, k, j, d) {
+      # The pieces a to b of a string, with the quotes between them, joined half at a time: one at a
+      # time is quadratic in its escaped quotes.
+      function join(a, b,   m) { if (a == b) return q[a]; m = int((a + b) / 2); return join(a, m) "\"" join(m + 1, b) }
+      # A rule ends: its words up to its first list, then each of that list, then the words after it.
+      # A second list ends what is read, as more follows (RC_TAIL). canonical_matching=True matches
+      # without case (cm).
+      function done(   w, x, k, j, d) {
         d = dec == "prompt" ? "ask" : dec == "forbidden" ? "deny" : dec == "allow" ? "allow" : ""
         if (d == "") return
-        w = ""
+        w = ""; x = ""; j = 0
         for (k = 1; k <= nt; k++) {
-          if (T[k] == "\002") { for (j = 1; j <= na; j++) out(d, 0, 0, "", opn(w (w == "" ? "" : " ") A[j])); return }
-          w = w (w == "" ? "" : " ") T[k]
+          if (T[k] == "\002") j = k
+          else if (j) x = x " " T[k]
+          else w = w (w == "" ? "" : " ") T[k]
         }
-        if (w != "") out(d, 0, 0, "", opn(w))
+        if (!j) { if (w != "") out(d, 0, cm, "", opn(w)); return }
+        for (k = 1; k <= na; k++) { RC_TAIL = stop; out(d, 0, cm, "", opn(w (w == "" ? "" : " ") A[k] x)) }
       }
       function str(s) {
         gsub(/\\\\/, "\001", s); gsub(/\\"/, "\"", s); gsub(/\001/, "\\", s); gsub(/[ \t]/, "\001", s)
@@ -2934,13 +2963,14 @@ rc_read() { # file format fid rep
       # The code between strings, a character at a time (at most 1,024 between two quotes).
       function codep(s,   i, n, c, k) {
         while (!on) { k = index(s, "prefix_rule("); h = index(s, "#"); if (h && (!k || h < k)) { cmt = 1; return }; if (!k) return
-          s = substr(s, k + 12); on = 1; dp = 1; bd = 0; kw = ""; id = ""; nt = 0; na = 0; fa = 0; stop = 0; dec = "allow" }
+          s = substr(s, k + 12); on = 1; dp = 1; bd = 0; kw = ""; id = ""; nt = 0; na = 0; fa = 0; stop = 0; dec = "allow"; cm = 0 }
         if (length(s) > 1024) { cut(); on = 0; return }
         n = length(s)
         for (i = 1; i <= n; i++) {
           c = substr(s, i, 1)
           if (c ~ /[A-Za-z0-9_]/) { id = id c; continue }
           if (c == " " || c == "\t") continue
+          if (kw == "canonical_matching" && bd == 0 && id == "True") cm = 1
           if (c == "=") kw = id
           else if (c == "[") { bd++ }
           else if (c == "]") { if (kw == "pattern" && bd == 2) { if (fa) stop = 1; else { T[++nt] = "\002"; fa = 1 } }; bd-- }
@@ -2955,10 +2985,11 @@ rc_read() { # file format fid rep
       { if (!on && $0 ~ /^[ \t]*#/) next
         nq = split($0, q, "\""); st = 0; cmt = 0
         for (i = 1; i <= nq && !cmt; i++) {
-          if (st == 0) { codep(q[i]); if (i < nq && !cmt) { st = 1; sv = "" }; continue }
-          sv = sv q[i]
-          if (i < nq && trail(q[i]) % 2 == 1) { sv = sv "\""; continue }
-          st = 0; if (on) str(sv)
+          if (st == 0) { codep(q[i]); if (i < nq && !cmt) { st = 1; qa = i + 1; ln = 0; qb = 0 }; continue }
+          if (!qb) { ln += length(q[i]) + 1; if (ln > 4097) qb = i }
+          if (i < nq && trail(q[i]) % 2 == 1) continue
+          # A token longer than 4096 characters keeps its first 4096 and \003, so it matches no command word.
+          st = 0; if (on && (kw == "pattern" || kw == "decision")) str(qb ? substr(join(qa, qb), 1, 4096) "\003" : join(qa, i))
         }
         if (st == 1 && on) { cut(); on = 0 }
       }
@@ -2983,9 +3014,9 @@ rc_read() { # file format fid rep
         }
         BAL = dp <= 0; return k
       }
-      function endrule(   d, r, k, df, ml) {
+      function endrule(   d, r, k, df, ml, w) {
         if (!inr) return; inr = 0
-        if (args || mcp || !shell) return
+        if (args || mcp || !shell || bad) return
         d = dec == "allow" ? "allow" : dec == "deny" ? "deny" : dec == "ask_user" ? "ask" : ""
         if (d == "") return
         # A rule with modes applies only in them. Without default among them, a deny or ask covers no
@@ -2998,15 +3029,28 @@ rc_read() { # file format fid rep
           else RC_NOTE = "only in " ml (nm > 1 ? " modes" : " mode")
         }
         r = 4 + pri / 1000
-        if (np > 0) for (k = 1; k <= np; k++) out(d, r, 0, "", fixed(PX[k], "prefix"))
+        if (np > 0) for (k = 1; k <= np; k++) { w = fixed(PX[k], "prefix"); if (w == "*") RC_RAW = tn; out(d, r, 0, "", w) }
         else if (rgx != "") outrx(d, r, 0, "", rgx, "rx", rgx)
-        else out(d, r, 0, "", "*")
+        else { RC_RAW = tn; out(d, r, 0, "", "*") }
         RC_NC = 0; RC_NOTE = ""
       }
+      # A rule with a value or a key this does not read is not read, and the file is named as not
+      # read in full: rather than taken as a rule with no command, which a deny would make cover all.
+      function cutr() { rccut(); if (inr) bad = 1 }
+      # A value that opens a multi-line string ("""), or holds one: the delimiter, and ML set to it
+      # while its lines follow.
+      function mls(v,   k, n, d) {
+        k = index(v, "\"\"\""); n = index(v, "\047\047\047")
+        if (!k && !n) return ""
+        d = (k && (!n || k < n)) ? "\"\"\"" : "\047\047\047"
+        if (!index(substr(v, index(v, d) + 3), d)) ML = d
+        return d
+      }
       function val(k, v,   n, j) {
-        if (length(v) > 4096) { if (!ct) printf "%s\t%s\tcut\t0\t0\t\t*\n", FID, REP; ct = 1; return }
+        if (k !~ /^(toolName|commandPrefix|commandRegex|decision|priority|argsPattern|mcpName|modes)$/) { if (length(v) > 4096 || (mls(v) != "" && ML != "")) rccut(); return }
+        if (length(v) > 4096 || mls(v) != "") { cutr(); return }
         n = strs(v)
-        if (k == "toolName") { for (j = 1; j <= n; j++) if (V[j] == "run_shell_command" || V[j] == "ShellTool") shell = 1 }
+        if (k == "toolName") { for (j = 1; j <= n; j++) if (V[j] == "run_shell_command" || V[j] == "ShellTool") { shell = 1; tn = V[j] } }
         else if (k == "commandPrefix") { np = 0; for (j = 1; j <= n; j++) PX[++np] = V[j] }
         else if (k == "commandRegex") rgx = n ? V[1] : ""
         else if (k == "decision") dec = n ? V[1] : ""
@@ -3015,13 +3059,20 @@ rc_read() { # file format fid rep
         else if (k == "mcpName") mcp = 1
         else if (k == "modes") { nm = 0; for (j = 1; j <= n; j++) if (V[j] != "") MD[++nm] = V[j] }
       }
-      acc != "" { acc = acc " " $0; strs(acc); if (BAL || length(acc) > 4096) { val(ak, acc); acc = "" }; next }
-      /^[ \t]*\[\[[ \t]*rule[ \t]*\]\][ \t]*(#.*)?$/ { endrule(); inr = 1; shell = 0; np = 0; rgx = ""; dec = ""; pri = 0; args = 0; mcp = 0; nm = 0; next }
+      ML != "" { if (index($0, ML)) ML = ""; next }
+      acc != "" { acc = acc " " $0; if (length(acc) > 4096) { val(ak, acc); acc = ""; next }; strs(acc); if (BAL) { val(ak, acc); acc = "" }; next }
+      /^[ \t]*#/ { next }
+      /^[ \t]*\[\[[ \t]*rule[ \t]*\]\][ \t]*(#.*)?$/ { endrule(); inr = 1; shell = 0; np = 0; rgx = ""; dec = ""; pri = 0; args = 0; mcp = 0; nm = 0; bad = 0; tn = ""; next }
       /^[ \t]*\[/ { endrule(); next }
-      inr && match($0, /^[ \t]*[A-Za-z_]+[ \t]*=[ \t]*/) {
+      # A key this does not read: in a rule, a quoted or dotted one may be one of its keys, so the
+      # rule is not read. A value that opens a multi-line string has its lines skipped, and the file
+      # is named as not read in full.
+      !match($0, /^[ \t]*[A-Za-z_]+[ \t]*=[ \t]*/) { if (inr && $0 ~ /^[ \t]*([A-Za-z0-9_-]+[ \t]*\.|["\047])/) { cutr(); mls($0) } else if (mls($0) != "" && ML != "") rccut(); next }
+      !inr { if (mls($0) != "" && ML != "") rccut(); next }
+      {
         k = substr($0, RSTART, RLENGTH); sub(/^[ \t]*/, "", k); sub(/[ \t]*=.*$/, "", k)
         v = substr($0, RSTART + RLENGTH)
-        if (v ~ /^\[/) { strs(v); if (!BAL) { acc = v; ak = k; next } }
+        if (v ~ /^\[/ && length(v) <= 4096) { strs(v); if (!BAL) { acc = v; ak = k; next } }
         val(k, v)
       }
       END { if (acc != "") val(ak, acc); endrule() }' ;;
@@ -3029,45 +3080,55 @@ rc_read() { # file format fid rep
       BEGIN { FID = ENVIRON["FID"]; REP = ENVIRON["REP"]; FMT = ENVIRON["FMT"]; S = "\034"
               QK = S "toolsSettings" S (ENVIRON["WIN"] == "1" ? "execute_cmd" : "execute_bash") S }
       { p = $1; v = substr($0, length($1) + 2) }
+      # json_leaves keeps the first 4096 characters of a longer string and ends it in \003 (lg): a rule
+      # is read only as far as its first 256 (fixed), so one such is read as having more after them.
       FMT == "claude" && p ~ ("^" S "permissions" S "(allow|ask|deny)\\[\\]$") && v ~ /^"/ {
-        d = substr(p, 14, length(p) - 15); v = unq(v)
-        if (v == "Bash" || v == "PowerShell") out(d, 0, 0, v, "*")
-        else if (match(v, /^(Bash|PowerShell)\(/) && v ~ /\)$/) out(d, 0, 0, substr(v, 1, RLENGTH - 1), fixed(substr(v, RLENGTH + 1, length(v) - RLENGTH - 1), "claude"))
+        d = substr(p, 14, length(p) - 15); v = unq(v); lg = sub("\003$", "", v)
+        # Bash and PowerShell are two tools (KD), and PowerShell rules match without case.
+        if (v == "Bash" || v == "PowerShell") { RC_RAW = v; out(d, 0, 0, v, "*") }
+        else if (match(v, /^(Bash|PowerShell)\(/) && (lg || v ~ /\)$/)) { kd = substr(v, 1, RLENGTH - 1); w = fixed(substr(v, RLENGTH + 1, length(v) - RLENGTH - (lg ? 0 : 1)), "claude"); if (w == "*") RC_RAW = v; out(d, 0, kd == "PowerShell", kd, w) }
       }
       FMT == "gemini-json" && v ~ /^"/ {
-        v = unq(v); sh = (v == "run_shell_command" || v == "ShellTool")
+        v = unq(v); lg = sub("\003$", "", v); sh = (v == "run_shell_command" || v == "ShellTool")
         if (p == S "tools" S "core[]") core = 1
         if (p == S "tools" S "allowed[]" || p == S "tools" S "core[]") {
           r = p == S "tools" S "core[]" ? 4.25 : 4.3
-          if (sh) out("allow", r, 0, "", "*")
-          else if (match(v, /^(run_shell_command|ShellTool)\(/) && v ~ /\)$/) { out("allow", r, 0, "", fixed(substr(v, RLENGTH + 1, length(v) - RLENGTH - 1), "prefix")); if (r == 4.3) nar = 1 }
+          if (sh) { RC_RAW = v; out("allow", r, 0, "", "*") }
+          else if (match(v, /^(run_shell_command|ShellTool)\(/) && (lg || v ~ /\)$/)) { w = fixed(substr(v, RLENGTH + 1, length(v) - RLENGTH - (lg ? 0 : 1)), "prefix"); if (w == "*") RC_RAW = v; out("allow", r, 0, "", w); if (r == 4.3) nar = 1 }
         }
         if (p == S "tools" S "confirmationRequired[]" && sh) out("ask", 4.35, 0, "", "*")
         if (p == S "tools" S "exclude[]" && sh) out("deny", 4.4, 0, "", "*")
       }
+      # chat.tools.terminal.enableAutoApprove set to false turns off every rule of the file.
+      FMT == "vscode" && p == S "chat.tools.terminal.enableAutoApprove" && v == "false" { out("deny", 0, 0, "", "*") }
       FMT == "vscode" && index(p, S "chat.tools.terminal.autoApprove" S) == 1 && (v == "true" || v == "false") {
         k = substr(p, 34); m = index(k, S)
         if (m) { if (substr(k, m + 1) != "approve") next; k = substr(k, 1, m - 1) }
+        # A regex key cut short has lost its flags: it is not read.
+        if (sub("\003$", "", k) && k ~ /^\//) { rccut(); next }
         gsub(/\\\\/, "\001", k); gsub(/\\"/, "\"", k); gsub(/\001/, "\\", k)
         d = v == "true" ? "allow" : "deny"
         if (match(k, /^\/.+\/[dgimsuvy]*$/)) { f = k; sub(/^.*\//, "", f); outrx(d, 0, index(f, "i") > 0, "", substr(k, 2, length(k) - length(f) - 2), "rx", k) }
         else out(d, 0, 0, "", fixed(k, "prefix"))
       }
       FMT == "roo" && (p == S "roo-cline.allowedCommands[]" || p == S "roo-cline.deniedCommands[]") && v ~ /^"/ {
-        v = unq(v); out(p ~ /allowed/ ? "allow" : "deny", length(v), 1, "", fixed(v, "str"))
+        v = unq(v); sub("\003$", "", v)
+        w = fixed(v, "str"); if (w == "*") RC_RAW = v; out(p ~ /allowed/ ? "allow" : "deny", length(v), 1, "", w)
       }
       FMT == "amazonq" && (p == QK "allowedCommands[]" || p == QK "deniedCommands[]") && v ~ /^"/ {
-        v = unq(v); outrx(p ~ /allowed/ ? "allow" : "deny", 0, 0, "", v, "rxfull", v)
+        v = unq(v); sub("\003$", "", v)
+        outrx(p ~ /allowed/ ? "allow" : "deny", 0, 0, "", v, "rxfull", v)
       }
       END { if (nar) out("deny", 4.29, 0, "", "*"); if (core) out("deny", 4.24, 0, "", "*") }' ;;
   esac
 }
 # The hits of a set of an agent's files whose rules apply together (data/remote-commands.tsv): an
 # allow rule of a file marked to report whose words hit a cmd line that no deny or ask rule of the set
-# covers at its rank or higher. Prints fid<TAB>rule as shown<TAB>what it allows; fid<TAB>!cut for a
-# file not read in full. A rule is shown only as far as the words it shares with the command, and a
-# regex as written up to any run of 16 letters and digits and to 64 characters, so a key in a rule
-# is never printed.
+# for the same tool covers at its rank or higher. Prints fid<TAB>rule as shown<TAB>what it allows;
+# fid<TAB>!cut for a file not read in full. A rule is shown only as far as the words it shares with
+# the command, and ... when more follows; a regex, or a rule that allows every command, is shown as
+# written only when it holds nothing past those words but its wildcard, and then up to any run of 16
+# letters and digits and to 64 characters, so a key in a rule is never printed.
 RC_MATCH='
 function agree(a, b, ci) {
   if (ci) { a = tolower(a); b = tolower(b) }
@@ -3081,53 +3142,64 @@ BEGIN { ns = split(ENVIRON["RC_SIGS"], L, "\n")
   for (j = 1; j <= ns; j++) { split(L[j], f, "|"); SN[j] = split(f[1], t, " "); for (k = 1; k <= SN[j]; k++) S[j, k] = t[k]; SC[j] = f[2] == "any"; SL[j] = f[3] }
   RUN = ""; for (k = 1; k <= 16; k++) RUN = RUN "[A-Za-z0-9_-]" }
 $3 == "cut" { if (!($1 in CUT)) { CUT[$1] = 1; print $1 "\t!cut" }; next }
-{ n++; F[n] = $1; R[n] = $2; D[n] = $3; K[n] = $4 + 0; C[n] = $5; KD[n] = $6; WS[n] = $7; TL[n] = $8; RW[n] = $9; NT[n] = $10 }
+{ n++; F[n] = $1; R[n] = $2 ""; D[n] = $3; K[n] = $4 + 0; C[n] = $5; KD[n] = $6; WS[n] = $7; TL[n] = $8; RW[n] = $9; NT[n] = $10; MR[n] = $11 }
 END {
+  # A deny or ask rule covers only its own tool (KD): Claude Code'"'"'s Bash and PowerShell are two.
   for (i = 1; i <= n; i++) {
     if (D[i] != "deny" && D[i] != "ask") continue
     wn = words(WS[i]); if (!OPEN || TL[i] == 1) continue
-    for (j = 1; j <= ns; j++) if (wn <= SN[j] && agrees(wn, j, C[i] || SC[j]) && (!(j in OV) || K[i] > OV[j])) OV[j] = K[i]
+    for (j = 1; j <= ns; j++) if (wn <= SN[j] && agrees(wn, j, C[i] || SC[j]) && (!((KD[i], j) in OV) || K[i] > OV[KD[i], j])) OV[KD[i], j] = K[i]
   }
   for (i = 1; i <= n; i++) {
-    if (D[i] != "allow" || R[i] != 1) continue
+    if (D[i] != "allow" || (R[i] != "1" && R[i] != "b")) continue
     # A rule that matches one exact command (no wildcard, no prefix) can not run a command of an
-    # attacker'"'"'s choosing: it is never reported.
-    wn = words(WS[i]); if (wn == 0 || !OPEN) continue
+    # attacker'"'"'s choosing: it is never reported. A rule that allows every command is (one with no
+    # words before its wildcard, and nothing after it), but for Claude Code'"'"'s Bash in a file whose
+    # rep is b: section 1 or 2 lists it there.
+    wn = words(WS[i]); if (!OPEN) continue
+    if (wn == 0 && (TL[i] == 1 || (R[i] == "b" && KD[i] == "Bash"))) continue
     nl = 0; sn = 0; br = 0; seen = "\001"
     for (j = 1; j <= ns; j++) {
       if (!agrees(wn, j, C[i] || SC[j])) continue
-      if ((j in OV) && OV[j] >= K[i]) continue
+      if (((KD[i], j) in OV) && OV[KD[i], j] >= K[i]) continue
       if (!index(seen, "\001" SL[j] "\001")) { seen = seen SL[j] "\001"; LB[++nl] = SL[j] }
       m = wn < SN[j] ? wn : SN[j]; if (m > sn) sn = m
       if (wn < SN[j]) br = 1
     }
     if (nl == 0) continue
     lb = LB[1]; for (k = 2; k <= nl; k++) lb = lb (k == nl ? " and " : ", ") LB[k]
-    if (br) { tx = W[1]; for (k = 2; k <= wn; k++) tx = tx " " W[k]; tx = "allows every " tx " command, including ones that run commands " lb }
+    # A rule with more after its wildcard (TL) allows only some of the commands its words start.
+    if (wn == 0) tx = "allows every command, including ones that run commands " lb
+    else if (br) { tx = W[1]; for (k = 2; k <= wn; k++) tx = tx " " W[k]; tx = (TL[i] == 1 ? "allows " tx " commands" : "allows every " tx " command") ", including ones that run commands " lb }
     else tx = "runs commands " lb
     if (NT[i] != "") tx = tx ", " NT[i]
-    if (RW[i] != "") sh = safe(RW[i])
+    # A rule that allows every command is its tool or a wildcard alone, shown as written.
+    if (wn == 0) { sh = RW[i] != "" ? RW[i] : KD[i] != "" ? KD[i] : "*"; if (length(sh) > 64) sh = substr(sh, 1, 64) "..."; sh = sh (MR[i] == 1 ? " ..." : "") }
+    else if (RW[i] != "" && TL[i] != 1 && wn == sn) sh = safe(RW[i]) (MR[i] == 1 ? " ..." : "")
     else {
       sh = W[1]; for (k = 2; k <= sn; k++) sh = sh " " W[k]
-      if (wn > sn) sh = sh " ..."; else if (OPEN && W[wn] !~ /\*$/) sh = sh " *"
+      if (wn > sn || TL[i] == 1 || RW[i] != "") sh = sh " ..."; else if (OPEN && W[wn] !~ /\*$/) sh = sh " *"
       if (KD[i] != "") sh = KD[i] "(" sh ")"
     }
     if (!((F[i] SUBSEP sh) in SEEN)) { SEEN[F[i], sh] = 1; print F[i] "\t" sh "\t" tx }
   }
 }'
 # rep|format|file lines, one set: file<TAB>rule<TAB>labels for each hit, file<TAB>!cut for each file
-# not read in full.
+# not read in full. A rep is 1 for a file whose hits are reported, b for one whose Claude Code Bash
+# allowed whole is listed elsewhere, 0 for one read only for its deny and ask rules. One awk maps
+# each hit's fid back to its file.
 rc_run() { # lines
   printf '%s\n' "$1" | awk 'NF' | { _n=0; while IFS='|' read -r _rp _rfm _rf; do _n=$((_n + 1)); rc_read "$_rf" "$_rfm" "$_n" "$_rp"; done; } |
-    RC_SIGS=$RC_SIGS awk -F '\t' "$RC_MATCH" | while IFS="$TAB" read -r _id _rs _rlb; do
-      printf '%s\t%s\t%s\n' "$(printf '%s\n' "$1" | awk 'NF' | sed -n "${_id}p" | cut -d'|' -f3-)" "$_rs" "$_rlb"
-    done
+    RC_SIGS=$RC_SIGS awk -F '\t' "$RC_MATCH" | RC_SET=$1 awk -F "$TAB" '
+      BEGIN { n = split(ENVIRON["RC_SET"], L, "\n"); k = 0
+        for (i = 1; i <= n; i++) if (L[i] ~ /[^ \t]/) { s = substr(L[i], index(L[i], "|") + 1); FL[++k] = substr(s, index(s, "|") + 1) } }
+      { print FL[$1] "\t" $2 "\t" $3 }'
 }
-# The person's own Claude Code settings files (data/remote-commands.tsv): their deny and ask rules
-# apply in every project.
+# The person's own Claude Code settings files whose deny and ask rules apply in every project: the
+# agent group's (data/remote-commands.tsv). A local one applies only in its own folder.
 RC_CC_USER=$(printf '%s\n' "$RC_FILES" | while IFS='|' read -r _a _o _fm _g _p _nt; do
   case "$_o" in (all|"$_os") ;; (*) continue ;; esac
-  [ "$_fm" = claude ] && [ -f "$_p" ] && fleet_ok "$_p" && [ -r "$_p" ] && ! too_big "$_p" && printf '0|claude|%s\n' "$_p"
+  [ "$_fm" = claude ] && [ "$_g" = agent ] && [ -f "$_p" ] && fleet_ok "$_p" && [ -r "$_p" ] && ! too_big "$_p" && printf '0|claude|%s\n' "$_p"
 done)
 # Claude Code's endpoint variables, and each one's provider's own API host (its env-vars page and each
 # provider's page): ANTHROPIC_BASE_URL at api.anthropic.com; Amazon Bedrock at bedrock-runtime in an AWS
@@ -3220,28 +3292,33 @@ while IFS= read -r f; do
   if printf '%s' "$_t" | grep -qE '"Bash(\(\*\))?"'; then
     if aa_hit "$f" '"permissions": {"allow": ["Bash"'; then _ab=Bash; elif aa_hit "$f" '"permissions": {"allow": ["Bash(*)"'; then _ab='Bash(*)'; fi
   fi
+  # The note that the folder must be trusted follows the last of the allow rules listed.
+  _tr=""
   if [ -n "$_ab" ]; then
-    case "$f" in */settings.local.json) _tr="" ;; *) _tr=". Claude Code applies a project's allow rules once you trust the folder" ;; esac
-    _w="${_w:+$_w, }run every Bash command without asking, with permissions.allow: $_ab$_tr"
+    case "$f" in */settings.local.json) ;; *) _tr=". Claude Code applies a project's allow rules once you trust the folder" ;; esac
+    _w="${_w:+$_w, }run every Bash command without asking, with permissions.allow: $_ab"
   fi
   # Allow rules for commands that run commands on other machines (data/remote-commands.tsv), with the
   # person's own deny and ask rules and both of the project's files. A settings.local.json's apply
-  # without trust: section 1 lists them. A settings.json's wait for it: they are listed here.
+  # without trust: section 1 lists them. A settings.json's wait for it: they are listed here. Bash
+  # allowed whole is said above (rep b).
   case "$_t" in *'"Bash'*|*'"PowerShell'*)
+    _rp=1; [ -n "$_ab" ] && _rp=b
     _rs=""; for _s in "${f%/*}/settings.json" "${f%/*}/settings.local.json"; do
-      if [ "$_s" = "$f" ]; then _rs="$_rs${NL}1|claude|$_s"; elif [ -f "$_s" ] && [ -r "$_s" ] && ! too_big "$_s"; then _rs="$_rs${NL}0|claude|$_s"; fi
+      if [ "$_s" = "$f" ]; then _rs="$_rs${NL}$_rp|claude|$_s"; elif [ -f "$_s" ] && [ -r "$_s" ] && ! too_big "$_s"; then _rs="$_rs${NL}0|claude|$_s"; fi
     done
     _rh=$(rc_run "$RC_CC_USER$_rs" | awk -F "$TAB" -v f="$f" '$1 == f && $2 != "!cut"')
     if [ -n "$_rh" ]; then
       case "$f" in
         */settings.local.json) RC_PROJ="$RC_PROJ$(printf '%s
 ' "$_rh" | awk -F "$TAB" -v OFS="$TAB" '{ print $1, "Claude Code", $2 ": " $3 }')$NL" ;;
-        *) [ -n "$_ab" ] && _tr="" || _tr=". Claude Code applies a project's allow rules once you trust the folder"
+        *) _tr=". Claude Code applies a project's allow rules once you trust the folder"
            _w="${_w:+$_w, }run commands on other machines without asking, with permissions.allow: $(printf '%s
-' "$_rh" | cut -f2 | paste -sd ',' - | sed 's/,/, /g')$_tr" ;;
+' "$_rh" | cut -f2 | paste -sd ',' - | sed 's/,/, /g')" ;;
       esac
     fi ;;
   esac
+  _w="$_w$_tr"
   auto_row "$f" "$_w" "$_t" "$_note"
 done <<EOF
 $ALLOW_FILES
@@ -8041,18 +8118,34 @@ rc_expand() { # path: the files it names; a *.ext file name is every such file i
 RC_ROWS=""; RC_TRIED=""; RC_CUTS=""
 while IFS= read -r _ra; do
   [ -n "$_ra" ] || continue
-  # T|file for each file named, then the sets: rep|format|file lines, a blank line between sets.
+  # T|file for each file named, then group|rep|format|note|file for each one read. Its rep is b when
+  # section 1 lists the file for this agent, which says there that Bash is allowed whole.
   _rsets=$(printf '%s\n' "$RC_FILES" | while IFS='|' read -r _a _o _fm _g _p _nt; do
     [ "$_a" = "$_ra" ] || continue
     case "$_o" in (all|"$_os") ;; (*) continue ;; esac
     rc_expand "$_p" | while IFS= read -r _f; do
       printf 'T|%s\n' "$_f"
       [ -f "$_f" ] && fleet_ok "$_f" && [ -r "$_f" ] && ! too_big "$_f" || continue
-      if [ "$_g" = file ]; then printf '\n1|%s|%s\n\n' "$_fm" "$_f"; else printf '1|%s|%s\n' "$_fm" "$_f"; fi
+      case "$NL$AA_LIST" in (*"$NL$_f$TAB$_a$TAB"*) _rp=b ;; (*) _rp=1 ;; esac
+      printf '%s|%s|%s|%s|%s\n' "$_g" "$_rp" "$_fm" "$_nt" "$_f"
     done
   done)
   RC_TRIED="$RC_TRIED$(printf '%s\n' "$_rsets" | sed -n 's/^T|//p')$NL"
-  _rnote=$(printf '%s\n' "$RC_FILES" | awk -F '|' -v a="$_ra" '$1 == a && $6 != "-" { print $6; exit }')
+  # Each file's note, as note<TAB>file.
+  _rnotes=$(printf '%s\n' "$_rsets" | awk '!/^T\|/ { s = $0; for (k = 1; k <= 3; k++) s = substr(s, index(s, "|") + 1); nt = substr(s, 1, index(s, "|") - 1); if (nt != "-") print nt "\t" substr(s, index(s, "|") + 1) }')
+  _rsetl=$(printf '%s\n' "$_rsets" | awk '
+  # The sets, a blank line after each: the agent group'"'"'s files together, each file of the file
+  # group alone, and each local one with the agent group'"'"'s, whose deny and ask rules apply over it
+  # while its own reach only it (data/remote-commands.tsv). A line is rep|format|file.
+  function one(s, r,   rp, fm) { rp = substr(s, 1, index(s, "|") - 1); s = substr(s, index(s, "|") + 1); fm = substr(s, 1, index(s, "|") - 1); s = substr(s, index(s, "|") + 1); return (r == "" ? rp : r) "|" fm "|" substr(s, index(s, "|") + 1) }
+  /^T\|/ { next }
+  { g = substr($0, 1, index($0, "|") - 1); s = substr($0, index($0, "|") + 1) }
+  g == "agent" { A[++na] = s } g == "file" { F[++nf] = s } g == "local" { LC[++nl] = s }
+  END {
+    if (na) { for (i = 1; i <= na; i++) print one(A[i], ""); print "" }
+    for (i = 1; i <= nf; i++) { print one(F[i], ""); print "" }
+    for (i = 1; i <= nl; i++) { for (j = 1; j <= na; j++) print one(A[j], 0); print one(LC[i], ""); print "" }
+  }')
   _rset=""
   while :; do
     IFS= read -r _rl; _eof=$?
@@ -8060,12 +8153,14 @@ while IFS= read -r _ra; do
     if [ -n "$_rset" ]; then
       _rh=$(rc_run "$_rset")
       RC_CUTS="$RC_CUTS$(printf '%s\n' "$_rh" | awk -F "$TAB" '$2 == "!cut" { print $1 }')$NL"
-      RC_ROWS="$RC_ROWS$(printf '%s\n' "$_rh" | awk -F "$TAB" -v OFS="$TAB" -v a="$_ra" -v nt="$_rnote" '$2 != "!cut" && NF >= 3 { print $1, a, $2 ": " $3 (nt == "" ? "" : ", " nt) }')$NL"
+      RC_ROWS="$RC_ROWS$(printf '%s\n' "$_rh" | RN=$_rnotes awk -F "$TAB" -v OFS="$TAB" -v a="$_ra" '
+        BEGIN { n = split(ENVIRON["RN"], L, "\n"); for (i = 1; i <= n; i++) { k = index(L[i], "\t"); if (k) N[substr(L[i], k + 1)] = substr(L[i], 1, k - 1) } }
+        $2 != "!cut" && NF >= 3 { nt = N[$1]; print $1, a, $2 ": " $3 (nt == "" ? "" : ", " nt) }')$NL"
       _rset=""
     fi
     [ "$_eof" -eq 0 ] || break
   done <<EOF
-$(printf '%s\n' "$_rsets" | grep -v '^T|')
+$_rsetl
 EOF
 done <<EOF
 $(printf '%s\n' "$RC_FILES" | cut -d'|' -f1 | awk 'length && !s[$0]++')
@@ -10373,7 +10468,7 @@ for _t in $NPM_TAGS; do
 done
 if [ "$N_OLD" -gt 0 ]; then G1="${YEL}!${RST}"; D1="$N_AG found, $(plural "$N_OLD" "security fix" "security fixes") to install"
 elif [ "$N_YOLO" -gt 0 ]; then G1="${YEL}!${RST}"; D1="$N_AG found, $N_YOLO_AG set to run commands without asking"
-elif [ "$N_REMOTE" -gt 0 ]; then G1="${YEL}!${RST}"; D1="$N_AG found, $N_REMOTE_AG allowed to run commands on other machines"
+elif [ "$N_REMOTE" -gt 0 ]; then G1="${YEL}!${RST}"; D1="$N_AG found, rules let $(plural "$N_REMOTE_AG" agent agents) run commands on other machines"
 elif [ "$N_AG" -eq 0 ]; then G1="${DIM}·${RST}"; D1="none found"
 elif [ "$N_IDLE" -gt 0 ]; then G1="${YEL}○${RST}"; D1="$N_AG found, $N_IDLE idle: $(first_names "$IDLE_NAMES" 2)"
 else G1="${GRN}✓${RST}"; D1="$N_AG found, all used in the last 30 days"; fi

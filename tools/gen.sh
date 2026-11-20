@@ -222,7 +222,7 @@ bad=$(awk '/^#pass$/ { if (!rows || last) print "data/keys.tsv: a #pass line wit
         function txt(s) { return s != "" && s !~ /[\047"`$|\\]/ }
         { if ($1 == "cmd") ok = NF == 5 && $2 ~ /^[A-Za-z0-9][A-Za-z0-9.-]*( [A-Za-z0-9][A-Za-z0-9.-]*)*$/ && $3 ~ /^(exact|any)$/ && txt($4) && $5 ~ /^https:\/\/[^ \047"`$|\\]+$/ && !seen[tolower($2)]++
           else if ($1 == "file") {
-            ok = NF == 7 && txt($2) && $3 ~ /^(all|mac|linux|win)$/ && $4 ~ /^(claude|codex|gemini-toml|gemini-json|vscode|roo|amazonq)$/ && $5 ~ /^(agent|file)$/ && txt($7)
+            ok = NF == 7 && txt($2) && $3 ~ /^(all|mac|linux|win)$/ && $4 ~ /^(claude|codex|gemini-toml|gemini-json|vscode|roo|amazonq)$/ && $5 ~ /^(agent|file|local)$/ && txt($7)
             p = $6; g = gsub(/\/\*\//, "/x/", p); g += sub(/\/\*\.[A-Za-z0-9]+$/, "/x.y", p); ok = ok && g <= 1 && path_ok(p)
           } else ok = 0
           if (!ok) print "data/remote-commands.tsv: " $0 }'
@@ -843,7 +843,9 @@ awk '/^# >>> agents[: ]/ { on = 1; next } /^# <<< agents$/ { exit }
     p = code($5); if ($3 == "db") p = p " (SQLite files)"; if ($3 == "sealed") p = p " (encrypted: counted and named as not checked)"
     if ($2 != "all") p = p " (" oss($2) " only)"; sp[$4] = add(sp[$4], p); next }
   $1 == "remote-commands" && $2 == "cmd" { nrc++; rcw[nrc] = $3; rcl[nrc] = $5; rcu[nrc] = $6; next }
-  $1 == "remote-commands" && $2 == "file" { k = $3; if (!(k in rfa)) { rfa[k] = 1; rfo[++nrf] = k }; w = code($7); if ($4 != "all") w = w " (" oss($4) " only)"; if ($8 != "-") rfn[k] = esc($8); rff[k] = add(rff[k], w); next }
+  $1 == "remote-commands" && $2 == "file" { k = $3; if (!(k in rfa)) { rfa[k] = 1; rfo[++nrf] = k; rf1[k] = $8 } else if ($8 != rf1[k]) rfd[k] = 1
+    w = code($7); if ($4 != "all") w = w " (" oss($4) " only)"; if ($8 != "-") rfn[k] = esc($8)
+    rff[k] = add(rff[k], w); rfp[k] = add(rfp[k], w ($8 != "-" ? " (" esc($8) ")" : "")); next }
   $1 == "auto-approve" { k = $2 "\t" $5; if (!(k in aa)) { aa[k] = 1; ao[++nao] = k }; af[k] = add(af[k], code($4)); next }
   $1 == "outdated" { k = $2 "\t" $7 "\t" $8; if (!(k in oo)) { oo[k] = 1; ok[++no] = k; onm[k] = $3; orng[k] = range($7); ohole[k] = $8; oadv[k] = $9 }
     w = $5 == "plist" ? "the app" : $5 == "folder" ? "its version folder" : $5 == "npm" ? "npm installs" : "MCP configs"
@@ -886,7 +888,8 @@ awk '/^# >>> agents[: ]/ { on = 1; next } /^# <<< agents$/ { exit }
     print ""
     print "Read in these files:"
     print ""
-    for (i = 1; i <= nrf; i++) print "- " esc(rfo[i]) ": " rff[rfo[i]] (rfo[i] in rfn ? " (" rfn[rfo[i]] ")" : "")
+    # An agent whose files have one note shows it once, after them; one whose notes differ, each after its file.
+    for (i = 1; i <= nrf; i++) print "- " esc(rfo[i]) ": " (rfo[i] in rfd ? rfp[rfo[i]] : rff[rfo[i]] (rfo[i] in rfn ? " (" rfn[rfo[i]] ")" : ""))
     print ""
     print "### Versions with a published security fix"
     print ""

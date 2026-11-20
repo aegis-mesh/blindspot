@@ -12,7 +12,9 @@
 #     os      all, mac, linux or win (win is Git Bash and gird-check.ps1)
 #     format  how the file's rules are read (below)
 #     group   agent: a deny or ask rule in any file of that agent's lines can override an allow
-#             rule in another; file: only one in the same file
+#             rule in another; file: only one in the same file; local: a file that applies only in
+#             sessions started in one folder, read with the agent group's files, whose deny and ask
+#             rules can override its allow rules while its own override only its own
 #     path    the file, with the path tokens data/sessions.tsv uses. One folder may be *, for that
 #             file in every folder there (VS Code keeps a settings file for each profile), or the
 #             file name may be *.ext, for every such file in that folder
@@ -28,26 +30,36 @@
 # starts with them, so Codex's ["ssh", "prod"] is reported. A rule shorter than the line (Bash(aws *)) is
 # reported as allowing every such command. A deny or ask rule drops the hit only when it covers every
 # use of the line's command (its words, then any text, with nothing after its wildcard: Bash(ssh * rm)
-# or Bash(* --force) covers none) and the agent would apply it over the allow rule. A regex rule is
-# shown as written, up to a run of 16 letters or digits and to 64 characters. Limits: a rule that puts other words first
-# (aws --region x ssm send-command) is not caught, and neither is a regex that starts with a group or a
-# class ((ssh|scp) .*). A rule that allows every command (Bash, or a tool allowed whole) is not
-# reported here: section 1 reports Claude Code's above this list.
+# or Bash(* --force) covers none) and the agent would apply it over the allow rule. A rule is shown
+# only as far as the words it shares with the command, with ... when more follows; a regex is shown
+# as written when it holds nothing past those words but its wildcard, up to a run of 16 letters or
+# digits and to 64 characters, so a key in a rule is never shown. A rule that allows every command
+# (Bash, PowerShell, a tool allowed whole, or a wildcard alone such as Roo Code's * or a regex .*) is
+# reported as allowing every command, including these: but Claude Code's Bash allowed whole in a file
+# section 1 or 2 lists for it, which says so there. One with text after its wildcard (Bash(* --help))
+# is not. Limits: a rule that puts other words first (aws --region x ssm send-command) is not caught,
+# and neither is a regex that starts with a group or a class ((ssh|scp) .*).
 #
 # Formats, with the source each reader follows:
 #   claude  Claude Code settings, permissions.allow, ask and deny, rules Bash(...) and PowerShell(...)
 #           (code.claude.com/docs/en/permissions): deny, then ask, then allow, and a deny or ask
 #           from any file wins; * matches any text, a space before a trailing * also matches the bare
 #           command, :* at the end is the same as a trailing space and *, and PowerShell rules match
-#           without case. Managed settings are not read. A project's .claude/settings.local.json
-#           applies without trusting the folder, and is read for every project the home scan finds;
-#           a project's .claude/settings.json allow rules wait for that trust, and section 2 lists them.
+#           without case. Bash and PowerShell are two tools: a deny or ask of one leaves the other's
+#           rules. Managed settings are not read. ~/.claude/settings.json applies in every project;
+#           ~/.claude/settings.local.json is the home folder's local file, read only in sessions
+#           started there. A project's .claude/settings.local.json applies without trusting the
+#           folder (unless it is tracked in git or .claude is a link, when it waits for that trust:
+#           it is reported all the same), and is read for every project the home scan finds; a
+#           project's .claude/settings.json allow rules wait for that trust, and section 2 lists them.
 #   codex   Codex .rules files, prefix_rule(pattern=[...], decision=...) (openai/codex at c764c44:
 #           codex-rs/execpolicy/README.md, amend.rs writes one rule a line on "always allow",
 #           core/src/exec_policy.rs reads every *.rules file in rules/ of each config folder). Tokens
-#           match the command's first words in order; a list is alternatives; allow, prompt (ask) and
-#           forbidden (deny), the strictest wins. A project's .codex/rules load only once the
-#           project is trusted (config/src/loader/mod.rs) and are not read here.
+#           match the command's first words in order; a list is alternatives, and the words after it
+#           follow each (after a second list, a rule is read as covering only some uses); allow,
+#           prompt (ask) and forbidden (deny), the strictest wins; canonical_matching=True matches
+#           without case. A project's .codex/rules load only once the project is trusted
+#           (config/src/loader/mod.rs) and are not read here.
 #   gemini-toml  Gemini CLI policy files, [[rule]] with toolName run_shell_command, commandPrefix
 #           (a string or a list) or commandRegex, decision allow, deny or ask_user, and priority
 #           (google-gemini/gemini-cli at 615d6bc: docs/reference/policy-engine.md,
@@ -57,7 +69,8 @@
 #           the same priority is read as winning. A rule with argsPattern is not read. A rule with
 #           modes applies only in them: one without default is reported with its modes, a deny or ask
 #           one covers nothing, and an allow for yolo alone is not reported, as yolo mode runs every
-#           command without asking anyway.
+#           command without asking anyway. A rule with a quoted or dotted key, or a multi-line
+#           string, is not read, and the file is named as not read in full.
 #   gemini-json  Gemini CLI settings.json tools.allowed (run_shell_command(prefix), at 4.3, and with
 #           one a deny of every other command at 4.29), tools.core (allows at 4.25, a deny of every
 #           other tool at 4.24), tools.confirmationRequired (ask, 4.35) and tools.exclude (deny, 4.4)
@@ -65,8 +78,9 @@
 #   vscode  VS Code chat.tools.terminal.autoApprove (microsoft/vscode at 22d53a1ff:
 #           terminalChatAgentToolsConfiguration.ts and commandLineAutoApprover.ts). A key matches the
 #           start of a command up to a word boundary, or is a /regex/ with flags; true approves, false
-#           always asks and wins over true, and an object's approve does the same. It declares no
-#           scope, so a profile's settings file holds its own.
+#           always asks and wins over true, and an object's approve does the same.
+#           chat.tools.terminal.enableAutoApprove set to false turns off every rule of the file. They
+#           declare no scope, so a profile's settings file holds its own.
 #   roo     Roo Code roo-cline.allowedCommands and deniedCommands in VS Code's user settings
 #           (RooCodeInc/Roo-Code at b867ec9: src/package.json, src/core/auto-approval/commands.ts).
 #           A command is allowed when it starts with an entry, without case and with no word boundary;
@@ -88,7 +102,7 @@ cmd	kubectl exec	exact	in Kubernetes containers	https://kubernetes.io/docs/refer
 cmd	Invoke-Command	any	on other machines with PowerShell	https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.core/invoke-command
 cmd	Enter-PSSession	any	on other machines with PowerShell	https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.core/enter-pssession
 file	Claude Code	all	claude	agent	{ENV:CLAUDE_CONFIG_DIR:~/.claude}/settings.json	-
-file	Claude Code	all	claude	agent	{ENV:CLAUDE_CONFIG_DIR:~/.claude}/settings.local.json	-
+file	Claude Code	all	claude	local	{ENV:CLAUDE_CONFIG_DIR:~/.claude}/settings.local.json	only in sessions you start in your home folder
 file	Codex	all	codex	agent	{ENV:CODEX_HOME:~/.codex}/rules/*.rules	-
 file	Gemini CLI	all	gemini-toml	agent	{ENV:GEMINI_CLI_HOME:~}/.gemini/policies/*.toml	-
 file	Gemini CLI	all	gemini-json	agent	{ENV:GEMINI_CLI_HOME:~}/.gemini/settings.json	-

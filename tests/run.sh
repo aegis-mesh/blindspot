@@ -3293,8 +3293,7 @@ hasnot "near miss: initialPermissionMode without the allow setting is not listed
 # deny or ask rule the agent applies over it drops the hit. One hit and one near miss per format.
 rm -rf "$WORK/rc"; cp -R "$WORK/clean" "$WORK/rc"
 mkdir -p "$WORK/rc/.claude" "$WORK/rc/code/p1/.claude" "$WORK/rc/code/p2/.claude" "$WORK/rc/.codex/rules" "$WORK/rc/.gemini/policies" "$WORK/rc/$DAS/Code/User" "$WORK/rc/.aws/amazonq/cli-agents"
-printf '{"permissions": {"allow": ["Bash", "Bash(aws ssm send-command:*)", "Bash(ssh *)", "PowerShell(invoke-command *)", "Bash(aws s3 ls *)", "Bash(ssh-keygen:*)", "Bash(git:*)", "Bash(echo \\"],[\\" *)", "Bash(az ssh vm *)"],\n  "ask": ["Bash(az ssh *)", "Bash(az vm run-command invoke *)"]}}\n' > "$WORK/rc/.claude/settings.json"
-printf '{"permissions": {"deny": ["Bash(kubectl *)"]}}\n' > "$WORK/rc/.claude/settings.local.json"
+printf '{"permissions": {"allow": ["Bash", "Bash(aws ssm send-command:*)", "Bash(ssh *)", "PowerShell(invoke-command *)", "Bash(aws s3 ls *)", "Bash(ssh-keygen:*)", "Bash(git:*)", "Bash(echo \\"],[\\" *)", "Bash(az ssh vm *)"],\n  "ask": ["Bash(az ssh *)", "Bash(az vm run-command invoke *)"], "deny": ["Bash(kubectl *)"]}}\n' > "$WORK/rc/.claude/settings.json"
 printf '{"permissions": {"allow": ["Bash(aws:*)", "Bash(kubectl exec *)", "Bash(gcloud compute ssh*)"]}}\n' > "$WORK/rc/code/p1/.claude/settings.local.json"
 printf '{"permissions": {"deny": ["Bash(aws ssm *)"]}}\n' > "$WORK/rc/code/p1/.claude/settings.json"
 printf '{"permissions": {"allow": ["Bash(ssh*)"]}}\n' > "$WORK/rc/code/p2/.claude/settings.json"
@@ -3312,7 +3311,7 @@ hasnot "remote commands: near miss: aws s3, ssh-keygen and git are not listed" '
 hasnot "remote commands: a rule with escaped quotes and brackets is read, and allows nothing remote" 'Bash\(echo' "$WORK/rc.txt"
 hasnot "remote commands: an allow rule an ask rule covers is not listed" 'Bash\(az ssh' "$WORK/rc.txt"
 hasnot "remote commands: a rule only in ask is not listed" 'Bash\(az vm' "$WORK/rc.txt"
-hasnot "remote commands: an allow rule for every command is left to the list above" 'Bash\(\*\): runs|Bash: runs' "$WORK/rc.txt"
+hasnot "remote commands: an allow rule for every command is left to the list above" ' Bash(\([* :]*\))?: (runs|allows)' "$WORK/rc.txt"
 has    "remote commands: a project's local rule for aws lists what a project deny leaves" '! Claude Code ~/code/p1/\.claude/settings\.local\.json Bash\(aws \*\): allows every aws command, including ones that run commands in AWS containers Bash\(gcloud compute ssh\*\): runs commands on Google Cloud servers' "$WORK/rc.txt"
 hasnot "remote commands: a user deny drops a project's allow rule" 'Bash\(kubectl exec' "$WORK/rc.txt"
 has    "remote commands: a shared project file is listed as applying once trusted" '! ~/code/p2/\.claude/settings\.json Set to run commands on other machines without asking, with permissions\.allow: Bash\(ssh\*\)\. Claude Code applies a project.s allow rules once you trust the folder\.' "$WORK/rc.txt"
@@ -3331,7 +3330,7 @@ has    "remote commands: the fix says to remove the rules or ask first" 'Remove 
 rm -rf "$WORK/rc1"; cp -R "$WORK/clean" "$WORK/rc1"; mkdir -p "$WORK/rc1/.codex/rules"
 printf 'prefix_rule(pattern=["ssh"])\n' > "$WORK/rc1/.codex/rules/default.rules"
 dzrun "$WORK/rc1" GIRD_CHECK_COMPACT=1 | tr -s ' \n' '  ' > "$WORK/rc1-c.txt"
-has    "remote commands: row 01 counts the agents" 'Coding agents [0-9]+ found, 1 allowed to run commands' "$WORK/rc1-c.txt"
+has    "remote commands: row 01 counts the agents" 'Coding agents [0-9]+ found, rules let 1 agent run commands' "$WORK/rc1-c.txt"
 # A deny or ask rule drops a hit only when nothing narrows it after its wildcard; a rule with no
 # wildcard counts only with more words than the command; an open rule shorter than the command
 # allows every such command.
@@ -3377,7 +3376,7 @@ printf '{"toolsSettings": {"execute_bash": {"allowedCommands": ["kubectl exec .*
 dzrun "$WORK/rcq" | tr -s ' \n' '  ' > "$WORK/rcq.txt"
 hasnot "remote commands: an Amazon Q denied command drops an allowed one" 'kubectl' "$WORK/rcq.txt"
 has    "remote commands: an Amazon Q denied command with more after its .* does not" 'az ssh vm \.\*: runs commands on Azure servers' "$WORK/rcq.txt"
-has    "remote commands: a regex is shown cut before a run of letters and digits" 'ssh \.\* TOKEN=\.\.\.: runs commands on other machines over SSH' "$WORK/rcq.txt"
+has    "remote commands: a regex with more after its command's words is shown only as far as them" 'ssh \.\.\.: runs commands on other machines over SSH' "$WORK/rcq.txt"
 hasnot "remote commands: and the key in it is not printed" "$KF" "$WORK/rcq.txt"
 hasnot "remote commands: off Windows, Amazon Q's execute_cmd is not read" 'ssh \.\*: ' "$WORK/rcq.txt"
 mkdir -p "$WP/.aws/amazonq/cli-agents"; cp "$WORK/rcq/.aws/amazonq/cli-agents/a.json" "$WP/.aws/amazonq/cli-agents/a.json"
@@ -3398,6 +3397,111 @@ printf '{"toolsSettings": {"execute_bash": {"allowedCommands": ["^ssh prod$", "^
 dzrun "$WORK/rcr" | tr -s ' \n' '  ' > "$WORK/rcr.txt"
 hasnot "remote commands: an Amazon Q regex for one exact command is not listed" '\^ssh( prod|\\sprod|\\ -T)' "$WORK/rcr.txt"
 has    "remote commands: an Amazon Q regex with a space class then .* is listed" '\^ssh\\s\.\*: runs commands on other machines over SSH' "$WORK/rcr.txt"
+# ~/.claude/settings.local.json is the home folder's local file: Claude Code reads it only in sessions
+# started there. Its deny rules leave the person's own allow rules and the projects', and its own allow
+# rules are listed for the home folder, under the deny rules of ~/.claude/settings.json.
+rm -rf "$WORK/rch"; cp -R "$WORK/clean" "$WORK/rch"; mkdir -p "$WORK/rch/.claude" "$WORK/rch/code/p1/.claude"
+printf '{"permissions": {"allow": ["Bash(ssh *)"], "deny": ["Bash(az *)"]}}\n' > "$WORK/rch/.claude/settings.json"
+printf '{"permissions": {"allow": ["Bash(gcloud compute ssh *)", "Bash(az ssh vm *)"], "deny": ["Bash(ssh *)", "Bash(kubectl *)"]}}\n' > "$WORK/rch/.claude/settings.local.json"
+printf '{"permissions": {"allow": ["Bash(kubectl exec *)"]}}\n' > "$WORK/rch/code/p1/.claude/settings.local.json"
+dzrun "$WORK/rch" | tr -s ' \n' '  ' > "$WORK/rch.txt"
+has    "remote commands: a deny in ~/.claude/settings.local.json leaves the person's own allow rule" '! Claude Code ~/\.claude/settings\.json Bash\(ssh \*\): runs commands on other machines over SSH' "$WORK/rch.txt"
+has    "remote commands: and a project's" '! Claude Code ~/code/p1/\.claude/settings\.local\.json Bash\(kubectl exec \*\): runs commands in Kubernetes containers' "$WORK/rch.txt"
+has    "remote commands: an allow rule in ~/.claude/settings.local.json is listed for the home folder" '! Claude Code ~/\.claude/settings\.local\.json Bash\(gcloud compute ssh \*\): runs commands on Google Cloud servers, only in sessions you start in your home folder' "$WORK/rch.txt"
+hasnot "remote commands: under the deny rules of ~/.claude/settings.json" 'Bash\(az ssh' "$WORK/rch.txt"
+# Claude Code's Bash and PowerShell are two tools: a deny of one leaves the other's allow rules.
+# PowerShell rules match without case, and two that differ only in case are each listed. A rule with
+# more after its wildcard is shown with ..., and in section 2 the note that a project's allow rules wait
+# for trust follows the last of them.
+rm -rf "$WORK/rct"; cp -R "$WORK/clean" "$WORK/rct"; mkdir -p "$WORK/rct/.claude" "$WORK/rct/code/p/.claude" "$WORK/rct/code/q/.claude"
+printf '{"permissions": {"allow": ["Bash(ssh *)", "PowerShell(Invoke-Command *)", "PowerShell(invoke-command *)", "PowerShell(Kubectl Exec *)", "Bash(KUBECTL exec *)", "PowerShell(aws ssm *)", "Bash(az ssh vm * --rm)"],\n  "deny": ["PowerShell(ssh *)", "Bash(Invoke-Command *)", "PowerShell(AWS *)"]}}\n' > "$WORK/rct/.claude/settings.json"
+printf '{"permissions": {"allow": ["PowerShell(gcloud compute ssh *)", "Bash(kubectl exec *)"], "deny": ["Bash"]}}\n' > "$WORK/rct/code/p/.claude/settings.local.json"
+printf '{"permissions": {"allow": ["Bash", "PowerShell(Enter-PSSession *)"]}}\n' > "$WORK/rct/code/q/.claude/settings.json"
+dzrun "$WORK/rct" | tr -s ' \n' '  ' > "$WORK/rct.txt"
+has    "remote commands: a PowerShell deny leaves a Bash allow rule" 'Bash\(ssh \*\): runs commands on other machines over SSH' "$WORK/rct.txt"
+has    "remote commands: and a Bash deny a PowerShell one, listed with its twin in another case" 'PowerShell\(Invoke-Command \*\): runs commands on other machines with PowerShell PowerShell\(invoke-command \*\): runs commands on other machines with PowerShell' "$WORK/rct.txt"
+has    "remote commands: a PowerShell rule matches a command without case" 'PowerShell\(Kubectl Exec \*\): runs commands in Kubernetes containers' "$WORK/rct.txt"
+hasnot "remote commands: near miss: a Bash rule matches with case" 'Bash\(KUBECTL' "$WORK/rct.txt"
+hasnot "remote commands: a PowerShell deny matches without case too" 'PowerShell\(aws' "$WORK/rct.txt"
+has    "remote commands: a rule with more after its wildcard is shown with ..." 'Bash\(az ssh vm \.\.\.\): runs commands on Azure servers' "$WORK/rct.txt"
+has    "remote commands: a deny of Bash alone leaves PowerShell's rules" '! Claude Code ~/code/p/\.claude/settings\.local\.json PowerShell\(gcloud compute ssh \*\): runs commands on Google Cloud servers' "$WORK/rct.txt"
+hasnot "remote commands: and drops Bash's" 'Bash\(kubectl exec' "$WORK/rct.txt"
+has    "remote commands: the note that a project's rules wait for trust follows the last of them" '! ~/code/q/\.claude/settings\.json Set to run every Bash command without asking, with permissions\.allow: Bash, run commands on other machines without asking, with permissions\.allow: PowerShell\(Enter-PSSession \*\)\. Claude Code applies a project.s allow rules once you trust the folder\.' "$WORK/rct.txt"
+# A rule that allows every command is listed, in every format: but Claude Code's Bash allowed whole in a
+# file section 1 or 2 lists for it, which says so there. One with text after its wildcard is not.
+# chat.tools.terminal.enableAutoApprove set to false turns off a VS Code settings file's rules.
+rm -rf "$WORK/rca"; cp -R "$WORK/clean" "$WORK/rca"
+mkdir -p "$WORK/rca/.claude" "$WORK/rca/code/a/.claude" "$WORK/rca/code/b/.claude" "$WORK/rca/.gemini/policies" "$WORK/rca/$DAS/Code/User" "$WORK/rca/$DAS/Code - Insiders/User" "$WORK/rca/.aws/amazonq/cli-agents"
+printf '{"permissions": {"allow": ["PowerShell", "Bash(* --version)"]}}\n' > "$WORK/rca/.claude/settings.json"
+printf '{"permissions": {"allow": ["Bash"]}}\n' > "$WORK/rca/.claude/settings.local.json"
+printf '{"permissions": {"allow": ["PowerShell(*)"]}}\n' > "$WORK/rca/code/a/.claude/settings.local.json"
+printf '{"permissions": {"allow": ["PowerShell"]}}\n' > "$WORK/rca/code/b/.claude/settings.json"
+printf '{"tools": {"allowed": ["run_shell_command"]}}\n' > "$WORK/rca/.gemini/settings.json"
+printf '[[rule]]\ntoolName = "run_shell_command"\ndecision = "allow"\npriority = 100\n' > "$WORK/rca/.gemini/policies/a.toml"
+printf '{"roo-cline.allowedCommands": ["*"], "chat.tools.terminal.autoApprove": {"/.*/": true}}\n' > "$WORK/rca/$DAS/Code/User/settings.json"
+printf '{"chat.tools.terminal.enableAutoApprove": false, "chat.tools.terminal.autoApprove": {"kubectl exec": true}}\n' > "$WORK/rca/$DAS/Code - Insiders/User/settings.json"
+printf '{"toolsSettings": {"execute_bash": {"allowedCommands": [".*"]}}}\n' > "$WORK/rca/.aws/amazonq/cli-agents/a.json"
+dzrun "$WORK/rca" | tr -s ' \n' '  ' > "$WORK/rca.txt"
+has    "remote commands: PowerShell allowed whole is listed as allowing every command" '! Claude Code ~/\.claude/settings\.json PowerShell: allows every command, including ones that run commands on other machines over SSH' "$WORK/rca.txt"
+hasnot "remote commands: near miss: a rule with text after its wildcard alone is not" '\* --version' "$WORK/rca.txt"
+has    "remote commands: and Bash in ~/.claude/settings.local.json, which section 1 does not list" '! Claude Code ~/\.claude/settings\.local\.json Bash: allows every command, including ones that run commands on other machines over SSH' "$WORK/rca.txt"
+has    "remote commands: and PowerShell(*) in a project's local file" '! Claude Code ~/code/a/\.claude/settings\.local\.json PowerShell\(\*\): allows every command' "$WORK/rca.txt"
+has    "remote commands: and PowerShell in a project's shared file, in section 2" '! ~/code/b/\.claude/settings\.json Set to run commands on other machines without asking, with permissions\.allow: PowerShell\. Claude Code applies' "$WORK/rca.txt"
+has    "remote commands: Gemini CLI's shell tool allowed whole" '! Gemini CLI ~/\.gemini/settings\.json run_shell_command: allows every command' "$WORK/rca.txt"
+has    "remote commands: and a Gemini CLI policy with no command" '! Gemini CLI ~/\.gemini/policies/a\.toml run_shell_command: allows every command' "$WORK/rca.txt"
+has    "remote commands: a VS Code regex for every command" "! VS Code Copilot ~/$DAS/Code/User/settings\.json /\.\*/: allows every command" "$WORK/rca.txt"
+has    "remote commands: Roo Code's * alone" "! Roo Code ~/$DAS/Code/User/settings\.json \*: allows every command, including" "$WORK/rca.txt"
+has    "remote commands: Amazon Q's .* alone" '! Amazon Q ~/\.aws/amazonq/cli-agents/a\.json \.\*: allows every command, including' "$WORK/rca.txt"
+hasnot "remote commands: VS Code's enableAutoApprove set to false turns off the file's rules" 'kubectl exec \*: ' "$WORK/rca.txt"
+# Codex: canonical_matching=True matches without case, and the words after a list follow each of it.
+rm -rf "$WORK/rcc"; cp -R "$WORK/clean" "$WORK/rcc"; mkdir -p "$WORK/rcc/.codex/rules"
+printf 'prefix_rule(pattern=["Kubectl", "Exec"], canonical_matching=True)\nprefix_rule(pattern=["GCLOUD", "compute", "ssh"])\nprefix_rule(pattern=["kubectl", "exec"])\nprefix_rule(pattern=["kubectl", ["exec", "cp"], "-n", "prod"], decision="forbidden")\nprefix_rule(pattern=[["az", "oc"], "ssh", "vm"])\n' > "$WORK/rcc/.codex/rules/default.rules"
+dzrun "$WORK/rcc" | tr -s ' \n' '  ' > "$WORK/rcc.txt"
+has    "remote commands: a Codex rule with canonical_matching matches without case" 'Kubectl Exec \*: runs commands in Kubernetes containers' "$WORK/rcc.txt"
+hasnot "remote commands: near miss: one without it matches with case" 'GCLOUD' "$WORK/rcc.txt"
+has    "remote commands: a Codex deny with words after its list covers only those" 'kubectl exec \*: runs commands in Kubernetes containers' "$WORK/rcc.txt"
+has    "remote commands: a Codex list is read with the words after it" 'az ssh vm \*: runs commands on Azure servers' "$WORK/rcc.txt"
+# Gemini CLI: a rule with a key or a string this does not read is not taken as a rule with no command,
+# which a deny would make cover every command, and its file is named as not read in full.
+rm -rf "$WORK/rcn"; cp -R "$WORK/clean" "$WORK/rcn"; mkdir -p "$WORK/rcn/.gemini/policies"
+printf '[[rule]]\ntoolName = "run_shell_command"\ncommandPrefix = "ssh"\ndecision = "allow"\npriority = 500\n\n[[rule]]\ntoolName = "run_shell_command"\n"commandPrefix" = "rm"\ndecision = "deny"\npriority = 900\n' > "$WORK/rcn/.gemini/policies/a.toml"
+printf '[[rule]]\ntoolName = "run_shell_command"\ncommandPrefix = "kubectl exec"\ndecision = "allow"\npriority = 500\n\n[[rule]]\ntoolName = "run_shell_command"\ncommandRegex = """\nrm .*"""\ndecision = "deny"\npriority = 900\n' > "$WORK/rcn/.gemini/policies/b.toml"
+dzrun "$WORK/rcn" | tr -s ' \n' '  ' > "$WORK/rcn.txt"
+has    "remote commands: a Gemini CLI deny with a quoted key is not read as a deny of every command" 'ssh \*: runs commands on other machines over SSH' "$WORK/rcn.txt"
+has    "remote commands: nor one with a multi-line string" 'kubectl exec \*: runs commands in Kubernetes containers' "$WORK/rcn.txt"
+has    "remote commands: and both files are named as not read in full" 'could not be read, so the servers, tokens and settings in them were not checked: ~/\.gemini/policies/a\.toml ~/\.gemini/policies/b\.toml' "$WORK/rcn.txt"
+# A regex is shown only as far as the words it shares with the command when more follows, so no part of
+# a key in it is printed, whatever characters split the key.
+rm -rf "$WORK/rck"; cp -R "$WORK/clean" "$WORK/rck"; mkdir -p "$WORK/rck/.aws/amazonq/cli-agents" "$WORK/rck/.gemini/policies"
+K1=$(upper 10); K2=$(upper 10); K3=$(upper 10); K4=$(upper 10); E1=$(upper 5); E2=$(upper 6)
+printf '{"toolsSettings": {"execute_bash": {"allowedCommands": ["kubectl exec .* --secret %s/%s+%s/%s"]}}}\n' "$K1" "$K2" "$K3" "$K4" > "$WORK/rck/.aws/amazonq/cli-agents/a.json"
+printf '[[rule]]\ntoolName = "run_shell_command"\ncommandRegex = "az ssh vm .* -p %s~%s.%s~%s"\ndecision = "allow"\npriority = 500\n' "$E1" "$E2" "$K3" "$K4" > "$WORK/rck/.gemini/policies/a.toml"
+dzrun "$WORK/rck" | tr -s ' \n' '  ' > "$WORK/rck.txt"
+has    "remote commands: an Amazon Q regex with a key after its command's words is listed" '! Amazon Q ~/\.aws/amazonq/cli-agents/a\.json kubectl exec \.\.\.: runs commands in Kubernetes containers' "$WORK/rck.txt"
+has    "remote commands: and a Gemini CLI one" '! Gemini CLI ~/\.gemini/policies/a\.toml az ssh vm \.\.\.: runs commands on Azure servers' "$WORK/rck.txt"
+hasnot "remote commands: and no part of either key is printed" "$K1|$K2|$K3|$K4|$E1~|$E2" "$WORK/rck.txt"
+# Two rule files that can't be read are each named as not read, and counted.
+rm -rf "$WORK/rcu"; cp -R "$WORK/clean" "$WORK/rcu"; mkdir -p "$WORK/rcu/.codex/rules" "$WORK/rcu/.gemini/policies"
+printf 'prefix_rule(pattern=["ssh"])\n' > "$WORK/rcu/.codex/rules/a.rules"; printf '[[rule]]\n' > "$WORK/rcu/.gemini/policies/b.toml"
+chmod 000 "$WORK/rcu/.codex/rules/a.rules" "$WORK/rcu/.gemini/policies/b.toml"
+dzrun "$WORK/rcu" | tr -s ' \n' '  ' > "$WORK/rcu.txt"
+chmod 644 "$WORK/rcu/.codex/rules/a.rules" "$WORK/rcu/.gemini/policies/b.toml"
+has    "remote commands: two rule files that can't be read are each named as not read" '2 config or settings files could not be read, so the servers, tokens and settings in them were not checked: ~/\.codex/rules/a\.rules ~/\.gemini/policies/b\.toml' "$WORK/rcu.txt"
+# Rules read in linear time: a project's settings file and a Codex rules file of 800 KB, each a string
+# of escaped quotes, and one of spaces between two strings. They took over a minute.
+rm -rf "$WORK/rcbig"; cp -R "$WORK/clean" "$WORK/rcbig"; mkdir -p "$WORK/rcbig/code/x/.claude" "$WORK/rcbig/.codex/rules"
+python3 - "$WORK/rcbig" <<'PY3'
+import sys
+h = sys.argv[1]; q = '\\"' * 400000
+open(h + '/code/x/.claude/settings.json', 'w').write('{"permissions": {"allow": ["Bash(ssh *)", "' + q + '"]}}\n')
+open(h + '/code/x/.claude/settings.local.json', 'w').write('{"permissions": {"allow": ["Bash(kubectl exec *)",' + ' ' * 800000 + '"x"]}}\n')
+open(h + '/.codex/rules/big.rules', 'w').write('prefix_rule(pattern=["ssh", "' + q + '"])\n')
+PY3
+T0=$(date +%s); dzrun "$WORK/rcbig" | tr -s ' \n' '  ' > "$WORK/rcbig.txt"; T=$(( $(date +%s) - T0 ))
+has    "remote commands: a rule beside 800 KB of escaped quotes is read" '! ~/code/x/\.claude/settings\.json Set to run commands on other machines without asking, with permissions\.allow: Bash\(ssh \*\)' "$WORK/rcbig.txt"
+has    "remote commands: and one before 800 KB of spaces" '! Claude Code ~/code/x/\.claude/settings\.local\.json Bash\(kubectl exec \*\): runs' "$WORK/rcbig.txt"
+has    "remote commands: and a Codex rule with a token of 800 KB of them" '! Codex ~/\.codex/rules/big\.rules ssh \.\.\.: runs commands on other machines over SSH' "$WORK/rcbig.txt"
+if [ "$T" -le 60 ]; then ok "remote commands: and in linear time" "${T}s"; else bad "remote commands: and in linear time" "took ${T}s"; fi
 rm -rf "$WORK/dz-unr"; cp -R "$WORK/clean" "$WORK/dz-unr"; rm -f "$WORK/dz-unr/.cursor/mcp.json"; mkdir -p "$WORK/dz-unr/$DAS/Code/User" "$WORK/dz-unr/$DAS/Cursor/User"
 printf '{"chat.tools.global.autoApprove": true}\n' | tee "$WORK/dz-unr/$DAS/Code/User/settings.json" > "$WORK/dz-unr/$DAS/Cursor/User/settings.json"
 # No MCP token, so row 02 shows the files not read.

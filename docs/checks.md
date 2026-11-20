@@ -81,7 +81,7 @@ A saved rule that lets an agent run one of these commands without asking:
 
 Read in these files:
 
-- Claude Code: `{ENV:CLAUDE_CONFIG_DIR:~/.claude}/settings.json`, `{ENV:CLAUDE_CONFIG_DIR:~/.claude}/settings.local.json`
+- Claude Code: `{ENV:CLAUDE_CONFIG_DIR:~/.claude}/settings.json`, `{ENV:CLAUDE_CONFIG_DIR:~/.claude}/settings.local.json` (only in sessions you start in your home folder)
 - Codex: `{ENV:CODEX_HOME:~/.codex}/rules/*.rules`
 - Gemini CLI: `{ENV:GEMINI_CLI_HOME:~}/.gemini/policies/*.toml`, `{ENV:GEMINI_CLI_HOME:~}/.gemini/settings.json`
 - VS Code Copilot: `{AS}/Code/User/settings.json`, `{AS}/Code/User/profiles/*/settings.json`, `{AS}/Code - Insiders/User/settings.json`, `{AS}/Code - Insiders/User/profiles/*/settings.json`
@@ -1822,8 +1822,11 @@ A project whose workflows (`.github/workflows/*.yml` and `*.yaml`) use one of th
   `aws ssm send-command`, `kubectl exec` and the others listed above) are listed, in Claude Code,
   Codex, Gemini CLI, VS Code Copilot, Roo Code and Amazon Q Developer CLI. A project's shared Claude
   Code settings with one are listed in section 2. A rule that matches one exact command is never
-  listed: it cannot run a command of an attacker's choosing. A deny or ask rule drops a hit only when
-  it covers every use of the command. `data/remote-commands.tsv`'s header has the full reading rules.
+  listed: it cannot run a command of an attacker's choosing. A rule that allows every command is
+  listed too, except Claude Code's Bash allowed whole in a file section 1 or 2 already lists. A deny
+  or ask rule drops a hit only when it covers every use of the command, and only for its own tool:
+  Claude Code's Bash and PowerShell are two. `~/.claude/settings.local.json` applies only in sessions
+  started in the home folder. `data/remote-commands.tsv`'s header has the full reading rules.
 
 ### 2. MCP servers and project settings
 
