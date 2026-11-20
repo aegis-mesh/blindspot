@@ -341,6 +341,16 @@ for E in perl rg; do
   has    "$E: a key after an escaped newline at a piece boundary is found" 'Claude Code +1 file: Hugging Face' "$SE/esc-$E.txt"
 done
 SKIPPING=""
+# Two keys on adjacent lines of a raw-text session file: the first key's boundary takes the line
+# break, and the second, at the start of its line, is found all the same, as grep and ripgrep find it.
+mkdir -p "$SE/adj/.claude/paste-cache"
+printf '%s\n%s\n' "h""f_$(rnd 36)" "AK""IA$(upper 16)" > "$SE/adj/.claude/paste-cache/a.txt"
+for E in perl rg; do
+  SKIPPING=""; [ "$E" = rg ] && SKIPPING=$NORG
+  HOME="$SE/adj" GIRD_CHECK_SESSIONS_ENGINE=$E bash "$SCRIPT" --offline --all-sessions > "$SE/adj-$E.txt" 2>&1
+  has    "$E: two keys on adjacent lines of a raw-text session file are both found" 'Claude Code +1 file: (Hugging Face, AWS|AWS, Hugging Face)$' "$SE/adj-$E.txt"
+done
+SKIPPING=""
 # Keys at the start of a line (after a newline, not only at the start of a file), in the middle
 # of one and after an escaped newline, for every format that needs a boundary in front of it:
 # legacy OpenAI sk-, Google AQ., Hugging Face hf_ and AWS AKIA. One file per key and place.

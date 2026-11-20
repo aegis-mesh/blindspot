@@ -1749,7 +1749,7 @@ SESS_PRE=$KEY_STARTS
 # script stops them at the next piece.
 SESS_PERL='
 use strict; use warnings; use File::Find; use IO::Select;
-my @passes = map { [map { qr/$_/ } grep { length } split /\n/] } split /\n\n/, $ENV{SESS_KEYS}; my $pre = qr/$ENV{SESS_PRE}/; my $owner = getppid(); my $parent = $$; my @kids;
+my @passes = map { [map { qr/$_/m } grep { length } split /\n/] } split /\n\n/, $ENV{SESS_KEYS}; my $pre = qr/$ENV{SESS_PRE}/m; my $owner = getppid(); my $parent = $$; my @kids;
 $SIG{TERM} = $SIG{HUP} = $SIG{INT} = $SIG{PIPE} = sub { kill "TERM", @kids; exit 0 };
 my @f = grep { !-d $_ && -f $_ } @ARGV; my $unread = 0;
 {
@@ -1778,7 +1778,9 @@ for my $w (0 .. $n - 1) {
       binmode $h; local $/ = \1048576; my $buf = "";
       # One regex a pattern (SESS_KEYS), each run from where the last match ended: the leftmost
       # match wins, and of two at one place the pattern listed first, as in one alternation. Each
-      # pass (an empty line in SESS_KEYS) is matched on its own.
+      # pass (an empty line in SESS_KEYS) is matched on its own. Each is compiled with /m, so ^ and $
+      # match at the ends of every line, as grep and ripgrep read them: a key at the start of a line
+      # is found after one whose boundary took the line break before it.
       my $scan = sub { my $t = shift; return unless $t =~ $pre; $_->($t) for map { my $re = $_; sub {
         my $t = shift; my @re = @$re;
         my $at = 0; my @nx;
