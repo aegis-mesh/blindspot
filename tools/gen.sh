@@ -1302,8 +1302,11 @@ unpacked() { sed -n "s|^\\\$PackedCheck = '\\([A-Za-z0-9+/=]*\\)'\$|\\1|p" "$1" 
 if [ "$(unpacked "$WORK/blindspot-fleet.ps1")" != "$_sha" ]; then echo "blindspot-fleet.ps1 does not unpack to gird-check.ps1 without its comments"; RC=1; fi
 if [ "$CHECK" -eq 1 ] && [ -f blindspot-fleet.ps1 ]; then
   splice blindspot-fleet.ps1 packed-check "$WORK/packed-check.ps1" > "$WORK/here.ps1" 2> /dev/null || : > "$WORK/here.ps1"
-  if ! cmp -s "$WORK/here.ps1" "$WORK/blindspot-fleet.ps1" || [ "$(unpacked blindspot-fleet.ps1)" != "$_sha" ] ||
-     ! grep -qx "\\\$PackedSha = '$_sha'" blindspot-fleet.ps1; then
+  # The packed block holds its two lines and nothing else: the rest of the file is compared above.
+  _pb=$(awk -v sha="$_sha" '/^# >>> packed-check[: ]/ { on = 1; next } /^# <<< packed-check$/ { on = 0; next }
+    on { n++; if ($0 ~ /^\$PackedCheck = \047[A-Za-z0-9+\/=]*\047$/) c++; else if ($0 == "$PackedSha = \047" sha "\047") h++; else x++ }
+    END { print (n == 2 && c == 1 && h == 1 && !x) ? "ok" : "no" }' blindspot-fleet.ps1)
+  if ! cmp -s "$WORK/here.ps1" "$WORK/blindspot-fleet.ps1" || [ "$(unpacked blindspot-fleet.ps1)" != "$_sha" ] || [ "$_pb" != ok ]; then
     echo "blindspot-fleet.ps1 is out of date with gird-fleet.ps1 and gird-check.ps1, or was edited: run bash tools/gen.sh"; RC=1
   fi
 fi

@@ -4351,6 +4351,12 @@ ow_kind autostart
 if [ "$OW_ONE" = "top ASI05;02 ASI05;" ]; then ok "owasp: a session hook that starts a script the way worms do alone tags section 02 with ASI05"; else bad "owasp: a session hook that starts a script the way worms do alone tags section 02 with ASI05" "$OW_ONE"; fi
 ow_kind ssh_planted
 if [ "$OW_ONE" = "top ASI04;05 ASI04;" ]; then ok "owasp: an SSH key malware adds alone tags section 05 with ASI04"; else bad "owasp: an SSH key malware adds alone tags section 05 with ASI04" "$OW_ONE"; fi
+# The account run (-AccountRun) keeps only ids of lowercase letters, digits and - (Fleet-Ids): a key id it
+# would drop is lost from the fleet result without a word. Its function, run on $PROVIDER_IDS, read out of
+# the script by PowerShell's own parser.
+_fids=$(BS_PS1=$SCRIPT "$PWSH" -NoProfile -NonInteractive -Command '$ast = [System.Management.Automation.Language.Parser]::ParseFile($env:BS_PS1, [ref]$null, [ref]$null); $f = $ast.Find({ param($n) $n -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -eq "Fleet-Ids" }, $true); $a = $ast.Find({ param($n) $n -is [System.Management.Automation.Language.AssignmentStatementAst] -and $n.Left.Extent.Text -eq ([char]36 + "PROVIDER_IDS") }, $true); . ([scriptblock]::Create($f.Extent.Text)); $ids = . ([scriptblock]::Create($a.Right.Extent.Text)); $ids + "|" + (Fleet-Ids $ids)' 2>&1)
+if [ -n "${_fids%%|*}" ] && [ "${_fids%%|*}" = "${_fids#*|}" ]; then ok "every key id passes the fleet id filter"
+else bad "every key id passes the fleet id filter" "$_fids"; fi
 
 echo "a Windows profile"
 # The profile tests/run.sh builds for Git Bash, with OS=Windows_NT so gird-check.ps1 takes the
@@ -5558,6 +5564,12 @@ cp "$SC/built.ps1" "$FW/bf/blindspot-fleet.ps1"
 (cd "$FW/bf" && PWSH="$PWSH" bash tools/gen.sh --check > "$SC/built-check.log" 2>&1); _rc2=$?
 if [ "$_rc" -ne 0 ] && grep -q 'blindspot-fleet.ps1 is out of date .* or was edited' "$SC/edited-check.log" && [ "$_rc2" -eq 0 ]; then ok "fleet: a hand-edited packed copy fails tools/gen.sh --check"
 else bad "fleet: a hand-edited packed copy fails tools/gen.sh --check" "edited: exit $_rc $(head -n 2 "$SC/edited-check.log"); as built: exit $_rc2 $(head -n 2 "$SC/built-check.log")"; fi
+# A line added inside the packed block, beside its two lines, fails --check too.
+awk '{ print } /^\$PackedSha = / { print "[Console]::Out.WriteLine(\"injected\")" }' "$SC/built.ps1" > "$FW/bf/blindspot-fleet.ps1"
+(cd "$FW/bf" && PWSH="$PWSH" bash tools/gen.sh --check > "$SC/inj-check.log" 2>&1); _rc=$?
+cp "$SC/built.ps1" "$FW/bf/blindspot-fleet.ps1"
+if [ "$_rc" -ne 0 ] && grep -q 'blindspot-fleet.ps1 is out of date .* or was edited' "$SC/inj-check.log"; then ok "fleet: a line added inside the packed block fails tools/gen.sh --check"
+else bad "fleet: a line added inside the packed block fails tools/gen.sh --check" "exit $_rc $(head -n 2 "$SC/inj-check.log")"; fi
 
 # Refusals, and the rules a reader checks in the file itself.
 fw_run all "$FW/clean" -- --all

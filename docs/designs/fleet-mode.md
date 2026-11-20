@@ -921,8 +921,9 @@ The script then:
    printed, on its output or its error stream, is copied into the result or reaches the MDM.
 4. Stops the check it started at the time limit, or when it prints more than it may, and nothing
    else. `-Deadline` sets the limit in seconds. It is 1500 when not given, to finish inside the
-   30 minutes Intune allows a script. What was found by then still counts, and the account is
-   partly checked. The script stops only the process it started, through the handle Windows gave
+   30 minutes Intune allows a script. The account run prints its findings once, at its end, so a
+   check stopped before then reports none: the account reads `not_checked`, with the reason
+   `time_limit`. The check is built to end first (below), so this is the fallback. The script stops only the process it started, through the handle Windows gave
    it when it started it. It never looks a process up by its id to stop it: Windows gives an ended
    process's id to new processes, so an id can name an unrelated program.
    The check stops the tools it started itself. Its only one is ripgrep, for the session check.
