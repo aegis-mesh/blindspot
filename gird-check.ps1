@@ -8084,7 +8084,12 @@ if ($OptAcctRun) {
     $fNpm = @($NpmTags | Where-Object { (Incident-Level $_) -ne 'act' })
   }
   $fPoss = @(); if ($LitePyc.Count -gt 0 -and $LITELLM_HIT -eq 0) { $fPoss = @('litellm') }
-  $fNr = $KeyUnread.Count + $Sec2Unread.Count + $AllowUnread.Count + $NpmUnread + $LockUnread.Count + $NpmSlow + $SlowFiles.Count + $ExtUnread + $PyUnread + $UnreadDirs.Count + $NmUnread.Count
+  # Every file or folder not read in full, each once whichever lists hold it (a project's unreadable
+  # settings.local.json is in three), as gird-check.sh counts each line of FLEET_NR and SEC2_UNREAD once,
+  # then the counts: ~/.ssh/authorized_keys and the workflows not read among them.
+  $fNrSet = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::Ordinal)
+  foreach ($fl in $KeyUnread, $Sec2Unread, $AllowUnread, $LockUnread, $SlowFiles, $UnreadDirs, $NmUnread) { foreach ($f in $fl) { if ($f) { [void]$fNrSet.Add([string]$f) } } }
+  $fNr = $fNrSet.Count + $NpmUnread + $NpmSlow + $ExtUnread + $PyUnread + $SshkUnread + $ActUnread
   $fEngine = $SessEngine; if ($fEngine -eq 'net') { $fEngine = 'dotnet' }
   $fSp = 0; if ($SESS_PARTIAL) { $fSp = 1 }
   # The run starts with -NoProfile, so a variable a profile sets is not followed. The profiles are read

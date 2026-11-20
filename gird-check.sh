@@ -9083,7 +9083,10 @@ finding_fields
 if [ "$ACCTRUN" -eq 1 ]; then
   # Each error find printed is a folder not read, and a find that refused the scan prints one too.
   _fe=$(grep -c . "$SCAN_ERR" 2>/dev/null); case "$_fe" in ''|*[!0-9]*) _fe=0 ;; esac
-  _nr=$(sort -u "$FLEET_NR" 2>/dev/null | grep -c .); _nr=$((_nr + NPM_UNREAD + N_LOCK_UNREAD + EXT_UNREAD + SSHK_UNREAD + N_NL_DIRS + N_NM_UNREAD + _fe))
+  # Section 2's files that are there but were not read in full count too (SEC2_UNREAD: a rules file
+  # its reader gave up on, a user hook file such as ~/.codex/hooks.json), each file once with FLEET_NR,
+  # as gird-check.ps1 counts each once.
+  _nr=$({ cat "$FLEET_NR" 2>/dev/null; printf '%s\n' "$SEC2_UNREAD"; } | sort -u | grep -c .); _nr=$((_nr + NPM_UNREAD + N_LOCK_UNREAD + EXT_UNREAD + SSHK_UNREAD + N_NL_DIRS + N_NM_UNREAD + _fe))
   # Root starts the run with a clean environment, so a variable a shell profile sets to move an agent's
   # or a tool's folders (CLAUDE_CONFIG_DIR, NVM_DIR and the like, data/folder-vars.tsv) is not
   # followed: the account is partly checked then. A variable set to a folder the run reads anyway

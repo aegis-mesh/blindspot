@@ -5268,6 +5268,27 @@ users "unread:$U:$FL/unread:/bin/zsh"
 fl_run unread
 chmod 755 "$FL/unread/code/locked"; chmod 644 "$FL/unread/.zshrc"
 if grep -qE '^unread\.files_not_checked=([2-9]|[1-9][0-9]+)$' "$FL/unread.flat" && grep -q '^unread\.outcome=not_checked$' "$FL/unread.flat"; then ok "fleet: a file or folder the account can't read is not checked, never clear"; else bad "fleet: a file or folder the account can't read is not checked, never clear" "$(grep '^unread' "$FL/unread.flat" | tr '\n' ' ')"; fi
+NR=$FL/nr; mkdir -p "$NR"
+nr_of() { env -i PATH=/usr/bin:/bin:/usr/sbin:/sbin HOME="$NR/$1" /bin/bash "$SCRIPT" --account-run 2> /dev/null < /dev/null | sed -n 's/^not_read=//p'; }
+# Each file not read in full counts once in an account run's not_read, however many checks read it,
+# and gird-check.sh and gird-check.ps1 count the same: a Codex rule its reader gives up on (single
+# quotes), a user hook file, ~/.ssh/authorized_keys and a workflow that can't be read, and all of them
+# with a project's settings.local.json that can't be read, which three checks read.
+for _n in cut hook ak wf all; do rm -rf "${NR:?}/$_n"; mkdir -p "$NR/$_n"; done
+for _n in cut all; do mkdir -p "$NR/$_n/.codex/rules"; printf "prefix_rule(pattern = ['ssh'], decision = 'allow')\n" > "$NR/$_n/.codex/rules/default.rules"; done
+for _n in hook all; do mkdir -p "$NR/$_n/.codex"; printf '{"hooks":{"SessionStart":[{"hooks":[{"type":"command","command":"node ~/.codex/package/index.js"}]}]}}\n' > "$NR/$_n/.codex/hooks.json"; chmod 000 "$NR/$_n/.codex/hooks.json"; done
+for _n in ak all; do mkdir -p "$NR/$_n/.ssh"; printf 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAI%s me@laptop\n' "$(rnd 43)" > "$NR/$_n/.ssh/authorized_keys"; chmod 000 "$NR/$_n/.ssh/authorized_keys"; done
+for _n in wf all; do mkdir -p "$NR/$_n/code/app/.github/workflows"; printf 'on: push\njobs:\n  a:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n' > "$NR/$_n/code/app/.github/workflows/ci.yml"; chmod 000 "$NR/$_n/code/app/.github/workflows/ci.yml"; done
+mkdir -p "$NR/all/code/p/.claude"; printf '{"permissions":{"allow":["Bash(ls)"]}}\n' > "$NR/all/code/p/.claude/settings.local.json"; chmod 000 "$NR/all/code/p/.claude/settings.local.json"
+nr_is() { # name want home
+  _g=$(nr_of "$3"); if [ "$_g" = "$2" ]; then ok "$1"; else bad "$1" "not_read=$_g, want $2"; fi
+}
+nr_is "fleet: not_read counts a rules file read only in part" 1 cut
+nr_is "fleet: not_read counts a user hook file it can't read" 1 hook
+nr_is "fleet: not_read counts an authorized_keys it can't read" 1 ak
+nr_is "fleet: not_read counts a workflow it can't read" 1 wf
+nr_is "fleet: not_read counts each file once, however many checks read it" 5 all
+chmod -R u+rw "$NR"
 mkdir -p "$FL/binhome/Library/Safari" "$FL/binhome/.local/bin"; : > "$FL/binhome/.local/bin/aider"; chmod 755 "$FL/binhome/.local/bin/aider"
 users "binhome:$U:$FL/binhome:/bin/zsh"
 fl_run binhome
