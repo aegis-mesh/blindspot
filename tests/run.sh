@@ -4358,6 +4358,20 @@ rm -rf "$WORK/odr"; mkdir -p "$WORK/odr"; cp -R gird-check.sh gird-check.ps1 gir
 (cd "$WORK/odr" && bash tools/gen.sh --check > "$WORK/odr.txt" 2>&1); RC=$?
 if [ "$RC" -eq 0 ] && ! grep -q 'owasp-derive block' "$WORK/odr.txt"; then ok "gen.sh: the committed owasp-derive block passes the guard"
 else bad "gen.sh: the committed owasp-derive block passes the guard" "exit $RC $(head -n 3 "$WORK/odr.txt")"; fi
+# Code outside the block's three functions runs when gird-fleet.sh loads it, and a function defined
+# inside one could take a name the guard lets through: both are refused.
+od_top() { # text: put before owasp_kinds, at the top level of the block
+  rm -rf "$WORK/odr"; mkdir -p "$WORK/odr"; cp -R gird-check.sh gird-check.ps1 gird-fleet.sh gird-fleet.ps1 gird-report.ps1 gird-intune.ps1 tools data "$WORK/odr/"
+  OD_TEXT=$1 awk '$0 == "owasp_kinds() {" { print ENVIRON["OD_TEXT"] } { print }' gird-check.sh > "$WORK/odr/gird-check.sh"
+  OD_SAME=0; cmp -s gird-check.sh "$WORK/odr/gird-check.sh" && OD_SAME=1
+  (cd "$WORK/odr" && bash tools/gen.sh > "$WORK/odr.txt" 2>&1); RC=$?
+}
+od_top '/bin/sh -c "id"'
+if od_says 'has code outside its functions'; then ok "gen.sh: a full-path command outside the owasp-derive block's functions is refused"; else bad "gen.sh: a full-path command outside the owasp-derive block's functions is refused" "$OD_WHY"; fi
+od_top 'printf() { /usr/bin/id; }'
+if od_says 'has code outside its functions'; then ok "gen.sh: a function named printf beside the owasp-derive block's functions is refused"; else bad "gen.sh: a function named printf beside the owasp-derive block's functions is refused" "$OD_WHY"; fi
+od_put "$(printf '  read() { /usr/bin/id; }\n%s' "$OD_DONE")"
+if od_says 'defines a function inside a function'; then ok "gen.sh: a function defined inside the owasp-derive block's functions is refused"; else bad "gen.sh: a function defined inside the owasp-derive block's functions is refused" "$OD_WHY"; fi
 od_edit() { # sed-program: gen.sh on a copy whose gird-check.sh has the edit; sets RC, and OD_SAME when the edit did not apply
   rm -rf "$WORK/odr"; mkdir -p "$WORK/odr"; cp -R gird-check.sh gird-check.ps1 gird-fleet.sh gird-fleet.ps1 gird-report.ps1 gird-intune.ps1 tools data "$WORK/odr/"
   sed "$1" gird-check.sh > "$WORK/odr/gird-check.sh"; OD_SAME=0; cmp -s gird-check.sh "$WORK/odr/gird-check.sh" && OD_SAME=1

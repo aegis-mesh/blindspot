@@ -373,7 +373,8 @@ bad="$bad${bad:+${_ow:+
 # line at a time, so it also refuses what would carry shell text past that line or past its reading: an
 # unquoted or <<- here-document, a backtick, a quote or a ( that does not close on its line, a line
 # that ends in \, a here-document after a # or with no end line. The body of a quoted here-document
-# (<<'X', <<"X", <<\X) is skipped to the line that is exactly X. Single-quoted text is skipped; each
+# (<<'X', <<"X", <<\X) is skipped to the line that is exactly X. A line outside the functions
+# owasp_set, owasp_kinds and incident_level, and a function defined inside one, are refused. Single-quoted text is skipped; each
 # command word after ; & | ( { $( and the shell keywords is checked; a ) only closes what is before it.
 # It reads text, not the shell's grammar, so it does not catch everything: a command between quotes it
 # pairs wrongly (: "'" ; id ; "'"), a command in the first arm of a case (case x in *) id ;; esac), a
@@ -398,6 +399,13 @@ OD_AWK='
     } }
   hd != "" { if ($0 == hd) hd = ""; next }
   /^[[:space:]]*#/ { next }
+  # Only the three functions: a line outside them runs when gird-fleet.sh loads the block, and a function
+  # defined inside one could take the name of a command the checks below let through (printf, read).
+  !inf { if ($0 ~ /^(owasp_set|owasp_kinds|incident_level)\(\) \{$/) { inf = 1; next }
+    if ($0 !~ /^[[:space:]]*$/) no(NR, "has code outside its functions: root runs this block when it loads, so every line is inside owasp_set, owasp_kinds or incident_level", $0)
+    next }
+  /^}$/ { inf = 0; next }
+  /^[[:space:]]*(function[[:space:]]+)?[A-Za-z_][A-Za-z0-9_]*[[:space:]]*\(\)/ { no(NR, "defines a function inside a function: root runs this block, so it defines only owasp_set, owasp_kinds and incident_level", $0) }
   { l = $0
     if (match(l, /(^|[^<])<<[[:space:]]*(\047[A-Za-z_][A-Za-z0-9_]*\047|"[A-Za-z_][A-Za-z0-9_]*"|\\[A-Za-z_][A-Za-z0-9_]*)[[:space:]]*$/)) {
       k = RSTART + index(substr(l, RSTART), "<<") - 1
