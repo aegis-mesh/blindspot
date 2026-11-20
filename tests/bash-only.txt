@@ -439,3 +439,4 @@ fleet: an inventory value with room for the owasp token gets it, at 250 characte
 fleet: an inventory value of 250 characters with no token is kept whole	gird-fleet.ps1 does not work out OWASP risks yet: Windows fleet mode waits for them (docs/designs/owasp.md, Windows)
 tools/review-guard.sh passes its tests	the review guard checks pull requests to this repository, not what gird-check.sh or gird-check.ps1 finds, and is one bash tool for both
 tools/release.sh refuses what it must and signs what it releases	tools/release.sh is one bash tool maintainers run on macOS or Linux to cut a release; it does not touch gird-check.ps1
+fleet: zsh's ZDOTDIR files and fish's conf.d are read like the profiles, and a ZDOTDIR that can't be told counts	Windows ships neither zsh nor fish: gird-check.ps1 -AccountRun reads PowerShell's profiles, tested by its own moved-folder twins

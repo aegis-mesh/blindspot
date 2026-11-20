@@ -5655,6 +5655,19 @@ mkdir -p "$MV/fifo"; mkfifo "$MV/fifo/.env.sh"
 chmod 600 "$MV/unread/.secret.sh"
 if [ "$(grep -c '=1$' "$MV/src1.txt")" -eq 4 ] && [ "$(grep -c '=0$' "$MV/src0.txt")" -eq 3 ]; then ok "fleet: a file a profile sources is read too, and one it can't follow counts where a listed variable is named"
 else bad "fleet: a file a profile sources is read too, and one it can't follow counts where a listed variable is named" "$(cat "$MV/src1.txt" "$MV/src0.txt" | tr '\n' ' ')"; fi
+# zsh reads its startup files from ZDOTDIR, and fish runs every conf.d/*.fish by itself: a folder moved
+# there is found as one moved in ~/.zshrc is. A ZDOTDIR that can't be told counts as moved; one whose
+# files move nothing, and a conf.d that names no listed variable, move nothing.
+mkdir -p "$MV/zdot/.zdot" "$MV/zdotok/.zdot"; printf 'export CLAUDE_CONFIG_DIR=/d/claude\n' > "$MV/zdot/.zdot/.zshrc"; printf 'alias ll="ls -l"\n' > "$MV/zdotok/.zdot/.zshrc"
+{ mv_case zdot .zshenv 'export ZDOTDIR="$HOME/.zdot"'
+  mv_case zdotcmd .zshenv 'export ZDOTDIR="$(cat ~/.zdot-path)"'
+  mv_case fishd .config/fish/conf.d/agents.fish 'set -gx CLAUDE_CONFIG_DIR /d/claude'
+} > "$MV/zf1.txt"
+{ mv_case zdotok .zshenv 'export ZDOTDIR="$HOME/.zdot"'
+  mv_case fishok .config/fish/conf.d/prompt.fish 'set -g fish_greeting ""'
+} > "$MV/zf0.txt"
+if [ "$(grep -c '=1$' "$MV/zf1.txt")" -eq 3 ] && [ "$(grep -c '=0$' "$MV/zf0.txt")" -eq 2 ]; then ok "fleet: zsh's ZDOTDIR files and fish's conf.d are read like the profiles, and a ZDOTDIR that can't be told counts"
+else bad "fleet: zsh's ZDOTDIR files and fish's conf.d are read like the profiles, and a ZDOTDIR that can't be told counts" "$(cat "$MV/zf1.txt" "$MV/zf0.txt" | tr '\n' ' ')"; fi
 # Each way a profile can reach a file that moves a folder: from outside the home, two files down, in a
 # loop over a folder's files (bash's and zsh's), through a variable set earlier, and a file placed in
 # a tool's own folder that is not the tool's own script.

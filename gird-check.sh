@@ -9319,7 +9319,8 @@ if [ "$ACCTRUN" -eq 1 ]; then
   # nothing.
   # One file's lines, for the reader above: prints M when a line moves a folder, N when one names a
   # listed variable, L for a file it sources that can't be told, V name value for a value a later path
-  # may use, A path for a file it sources, G path for the files a glob or a folder names. A line that
+  # may use, A path for a file it sources, G path for the files a glob or a folder names, Z when a line
+  # sets zsh's ZDOTDIR in a form other than the plain assignment V gives the value of. A line that
   # names a listed variable other than to read it ($X, ${X}, ${X:-y}) moves a folder, unless it is
   # export X=value, X=value or fish's set -x X value, of a folder the run reads for X (mv_seen).
   FLEET_MV_AWK='
@@ -9410,7 +9411,7 @@ if [ "$ACCTRUN" -eq 1 ]; then
         n = substr(r, 1, RLENGTH - 1); r = substr(r, RLENGTH + 1)
         if (match(r, /^("[^"]*"|\047[^\047]*\047|[^ \t;\047"]*)/)) {
           v = substr(r, 1, RLENGTH)
-          if (substr(r, RLENGTH + 1) ~ /^[ \t]*(;|$)/) { VARS[n] = expand(v); print "V\t" n "\t" VARS[n] }
+          if (substr(r, RLENGTH + 1) ~ /^[ \t]*(;|$)/) { VARS[n] = expand(v); print "V\t" n "\t" VARS[n]; if (n == "ZDOTDIR") ZV = 1 }
         }
       }
       r = l
@@ -9497,15 +9498,17 @@ if [ "$ACCTRUN" -eq 1 ]; then
     }
     {
       l = code($0); if (l !~ /[^ \t]/) next
-      track(l); w = 0; r = l; p = 0
+      ZV = 0; track(l); w = 0; zw = 0; r = l; p = 0
       while (match(r, /[A-Za-z0-9_]+/)) {
         t = substr(r, RSTART, RLENGTH); pre = substr(l, 1, p + RSTART - 1); post = substr(r, RSTART + RLENGTH)
         p += RSTART + RLENGTH - 1; r = post
+        if (t == "ZDOTDIR") { if (pre !~ /\$\{?#?$/ || pre ~ /\$#$/ || (pre ~ /\$\{#?$/ && post ~ /^:?=/)) zw = 1; continue }
         if (!(t in LISTED)) continue
         named = 1
         if (pre !~ /\$\{?#?$/ || pre ~ /\$#$/) w++
         else if (pre ~ /\$\{#?$/ && post ~ /^:?=/) w++
       }
+      if (zw && !ZV && l !~ /^[ \t]*export([ \t]+[A-Za-z_][A-Za-z0-9_]*)+[ \t]*;?[ \t]*$/) print "Z"
       NSRC = 0; sources(l); walk(l)
       if (w == 0 || l ~ /^[ \t]*export([ \t]+[A-Za-z_][A-Za-z0-9_]*)+[ \t]*;?[ \t]*$/) next
       if (w > 1) { print "M"; exit }
@@ -9583,7 +9586,12 @@ ${HOMEBREW_PREFIX}/opt/asdf/libexec/asdf.sh'
   # its own folder (fleet_scripts, such as nvm.sh), or by its whole path from Homebrew's prefix
   # (_mv_own, such as $HOMEBREW_PREFIX/opt/nvm/nvm.sh), is not read: it sets the tool's variable its
   # own way. What a command prints (eval "$(...)", source <(...)) is not followed. gird-check.ps1
-  # -AccountRun reads them the same way.
+  # -AccountRun reads them the same way. As zsh and fish load them by themselves, the files of fish's
+  # ~/.config/fish/conf.d are read with the profiles, and once a file read sets ZDOTDIR, the
+  # .zshenv, .zprofile, .zshrc and .zlogin in that folder. Setting ZDOTDIR names a listed variable, and
+  # a ZDOTDIR that can't be told (set in another form, or to a path with a command in it) is a file
+  # that can't be followed, so the account reads partly checked. Windows ships neither shell, so
+  # gird-check.ps1 reads neither.
   _mv_names="$_mv_agent|$_mv_tool"; _mv_dflt=""; _mv_scr=""
   for _mvn in $(printf '%s' "$_mv_names" | tr '|' ' '); do
     _mv_dflt="$_mv_dflt$(fleet_dflt "$_mvn" | sed "s/^/$_mvn$TAB/")$NL"
@@ -9617,6 +9625,16 @@ EOF
     if [ ! -f "$_mvp" ] || mv_linked "$_mvp"; then _mv_lost=1; return; fi
     _mv_q="$_mv_q$_mvp$NL"
   }
+  mv_profile() { # path: queues a profile the shell reads by itself, as the profiles below are
+    if [ -f "$1" ]; then fleet_ok "$1" && _mv_q="$_mv_q$1$NL"
+    elif [ -e "$1" ] || [ -L "$1" ] || behind_closed "$1"; then _mv_lost=1; fi
+  }
+  mv_zdot() { # value: once a file read sets ZDOTDIR, zsh reads its startup files from there
+    _mv_named=1
+    case "$1" in /*) ;; *) _mv_lost=1; return ;; esac
+    mv_local "$1" || { _mv_lost=1; return; }
+    for _mvzf in .zshenv .zprofile .zshrc .zlogin; do mv_profile "$(mv_norm "$1/$_mvzf")"; done
+  }
   mv_glob() { # path with * or ? in its last part, or a folder: queues each file it names, in order
     _mvg=$(mv_norm "$1")
     mv_local "$_mvg" || { _mv_lost=1; return; }
@@ -9632,6 +9650,12 @@ EOF
   for _pf in "$H/.zshrc" "$H/.zprofile" "$H/.zshenv" "$H/.zlogin" "$H/.bashrc" "$H/.bash_profile" "$H/.profile" "$H/.config/fish/config.fish"; do
     [ -f "$_pf" ] && fleet_ok "$_pf" && _mv_q="$_mv_q$_pf$NL"
   done
+  # fish runs each .fish file in conf.d before config.fish. A conf.d it can't list can't be told.
+  if [ -d "$H/.config/fish/conf.d" ]; then
+    if [ -r "$H/.config/fish/conf.d" ] && [ -x "$H/.config/fish/conf.d" ]; then
+      for _pf in "$H/.config/fish/conf.d"/*.fish; do mv_profile "$_pf"; done
+    else _mv_lost=1; _mv_named=1; fi
+  elif behind_closed "$H/.config/fish/conf.d"; then _mv_lost=1; _mv_named=1; fi
   while [ -n "$_mv_q" ] && [ "$_moved" -eq 0 ]; do
     _pf=${_mv_q%%"$NL"*}; _mv_q=${_mv_q#*"$NL"}
     case "$_mv_done" in *"$NL$_pf$NL"*) continue ;; esac
@@ -9648,7 +9672,8 @@ EOF
         M) _moved=1 ;;
         N) _mv_named=1 ;;
         L) _mv_lost=1 ;;
-        V) _mv_vars="$_mv_vars$_mvx$TAB$_mvy$NL" ;;
+        V) _mv_vars="$_mv_vars$_mvx$TAB$_mvy$NL"; [ "$_mvx" = ZDOTDIR ] && mv_zdot "$_mvy" ;;
+        Z) _mv_lost=1; _mv_named=1 ;;
         A) [ "$_moved" -eq 0 ] && mv_add "$_mvx" ;;
         G) [ "$_moved" -eq 0 ] && mv_glob "$_mvx" ;;
       esac
