@@ -30,9 +30,12 @@ if [ -f .git ]; then
   _gc=$(cd "$(git rev-parse --git-common-dir)" && pwd -P) && GITMNT=(-v "$_gc:$_gc:ro")
 fi
 # The Ubuntu jobs: the repo mounted read-only, the tools the CI image has, run as a user, not root.
+# --init gives the container an init that reaps orphans, as the CI runner's system does: without it
+# su is PID 1 and never reaps one, so a process that ended reads as running (a zombie), and the test
+# that stops a ripgrep stand-in fails here though it passes on GitHub.
 in_linux() { # image command [extra docker args]
   _img=$1; _cmd=$2; shift 2
-  docker run --rm -v "$PWD:/src:ro" ${GITMNT[@]+"${GITMNT[@]}"} "$@" "$_img" bash -c "
+  docker run --rm --init -v "$PWD:/src:ro" ${GITMNT[@]+"${GITMNT[@]}"} "$@" "$_img" bash -c "
     export DEBIAN_FRONTEND=noninteractive
     apt-get update -qq >/dev/null && apt-get install -y -qq python3 perl jq procps curl git expect file xxd ca-certificates libicu74 >/dev/null &&
     { [ ! -f /pwsh.tar.gz ] || { mkdir -p /opt/pwsh && tar -xzf /pwsh.tar.gz -C /opt/pwsh && chmod +x /opt/pwsh/pwsh && ln -s /opt/pwsh/pwsh /usr/local/bin/pwsh; }; } &&
