@@ -38,18 +38,27 @@ if command -v shasum >/dev/null 2>&1; then sha() { shasum -a 256 | awk '{ print 
 if ! ssh-keygen -Y sign 2>&1 | grep -q 'namespace'; then SKIPPING="ssh-keygen here has no -Y sign (OpenSSH 8.1 or later)"
 elif [ "$(git version | awk '{ split($3, v, "."); print (v[1] > 2 || (v[1] == 2 && v[2] >= 34)) }')" != 1 ]; then SKIPPING="git here is older than 2.34, which signs tags with SSH keys"
 fi
+# The cases that run this repository's own tools/gen.sh to the end need PowerShell, which builds
+# blindspot-fleet.ps1: they skip without it (needgen), and the rest still run.
+BASESKIP=$SKIPPING
+_pw=${PWSH:-$(command -v pwsh 2>/dev/null || true)}
+NOGEN=""; [ -n "$_pw" ] && [ -x "$_pw" ] || NOGEN="no PowerShell here (pwsh on PATH, or PWSH): bash tools/gen.sh needs it to build blindspot-fleet.ps1"
+needgen() { SKIPPING=${BASESKIP:-$NOGEN}; }
+endgen() { SKIPPING=$BASESKIP; }
 
 ssh-keygen -q -t ed25519 -N '' -C release-test -f "$W/key" < /dev/null
 ssh-keygen -q -t ed25519 -N '' -C other-test -f "$W/other" < /dev/null
 SIGNERLINE="release@blindspot namespaces=\"git,blindspot-release\" $(cat "$W/key.pub")"
 
 # fresh NAME [nokey]: a repository at $W/NAME with an origin at $W/NAME.git, a v1.2.0 release and
-# one commit since, which adds the 1.3.0 notes.
+# one commit since, which adds the 1.3.0 notes. It holds every file this repository's
+# .github/release-files names as committed, and what tools/gen.sh reads to build the rest.
 fresh() {
   R=$W/$1
   mkdir -p "$R/.github" "$R/tools"
-  cp -R "$SRC/gird-check.sh" "$SRC/gird-check.ps1" "$SRC/gird-fleet.sh" "$SRC/data" "$SRC/.gitattributes" "$SRC/.gitignore" "$R/"
-  cp "$SRC/tools/gen.sh" "$SRC/tools/release.sh" "$R/tools/"
+  for _f in $(awk '!/^[[:space:]]*#/ && $2 == "committed" { print $1 }' "$SRC/.github/release-files"); do cp "$SRC/$_f" "$R/"; done
+  cp -R "$SRC/data" "$SRC/.gitattributes" "$SRC/.gitignore" "$R/"
+  cp "$SRC/tools/gen.sh" "$SRC/tools/release.sh" "$SRC/tools/strip-comments.ps1" "$R/tools/"
   cp "$SRC/.github/allowed_signers" "$SRC/.github/release-files" "$R/.github/"
   [ "${2:-}" = nokey ] || printf '%s\n' "$SIGNERLINE" >> "$R/.github/allowed_signers"
   cp "$SRC/CHANGELOG.md" "$R/"
@@ -64,6 +73,14 @@ fresh() {
   git -C "$R" remote add origin "https://github.com/test-owner/$1.git"
   git -C "$R" fetch -q origin
 }
+# nobuilt NAME: drops the files the real tools/gen.sh builds from $W/NAME's release list and
+# .gitignore, for a case that puts a gen.sh of its own in its place.
+nobuilt() {
+  grep -v ' built$' "$W/$1/.github/release-files" > "$W/$1.rf" && cat "$W/$1.rf" > "$W/$1/.github/release-files"
+  awk '/^#.*built by bash tools\/gen\.sh/ { b = 1; next } b && (/^[[:space:]]*$/ || /^#/) { b = 0 } !b' "$W/$1/.gitignore" > "$W/$1.gi" && cat "$W/$1.gi" > "$W/$1/.gitignore"
+}
+# released NAME: the files a release of $W/NAME attaches, one per line, in name order.
+released() { awk '!/^[[:space:]]*#/ && NF == 2 { print $1 }' "$W/$1/.github/release-files" | LC_ALL=C sort; }
 # recommit NAME MESSAGE: commits every change in $W/NAME and makes it origin/main.
 recommit() { git -C "$W/$1" commit -q -am "$2" && git -C "$W/$1" push -q origin HEAD:main && git -C "$W/$1" fetch -q origin; }
 # rel NAME ANSWER [ARGS...]: runs the release tool in $W/NAME, typing ANSWER, into $W/NAME.out.
@@ -101,8 +118,9 @@ if refused "no '## 1.4.0, <date>' section" nolog; then ok "refuses a version wit
 fresh confirm; rel confirm 1.3 1.3.0
 if refused 'confirmation did not match' confirm && grep -q 'Changes since v1.2.0' "$W/confirm.out" && grep -q 'Notes for 1.3.0' "$W/confirm.out" && grep -q 'CHANGELOG.md *| *[0-9]' "$W/confirm.out"; then ok "lists the changes and refuses a wrong confirmation"; else bad "lists the changes and refuses a wrong confirmation" "exit $RC: $(tail -n 2 "$W/confirm.out")"; fi
 
-fresh stranger; KEY=$W/other rel stranger 1.3.0 1.3.0
+needgen; fresh stranger; KEY=$W/other rel stranger 1.3.0 1.3.0
 if refused 'does not verify against' stranger; then ok "refuses a key not in allowed_signers"; else bad "refuses a key not in allowed_signers" "exit $RC: $(tail -n 2 "$W/stranger.out")"; fi
+endgen
 
 fresh inside; cp "$W/key" "$W/inside/release-key"; KEY=$W/inside/release-key rel inside 1.3.0 1.3.0
 if refused 'release key is inside the repository' inside; then ok "refuses a release key inside the repository"; else bad "refuses a release key inside the repository" "exit $RC: $(tail -n 2 "$W/inside.out")"; fi
@@ -115,12 +133,13 @@ fresh upload; git -C "$W/upload" config remote.origin.uploadpack "$W/upload/evil
 if refused "own git config sets remote.origin.uploadpack which" upload; then ok "refuses a repository whose git config sets remote.origin.uploadpack"; else bad "refuses a repository whose git config sets remote.origin.uploadpack" "exit $RC: $(tail -n 2 "$W/upload.out")"; fi
 fresh cred; git -C "$W/cred" config credential.helper "$W/cred/evil"; rel cred 1.3.0 1.3.0
 if refused "own git config sets credential.helper which" cred; then ok "refuses a repository whose git config sets credential.helper"; else bad "refuses a repository whose git config sets credential.helper" "exit $RC: $(tail -n 2 "$W/cred.out")"; fi
-fresh wt; git -C "$W/wt" worktree add -q --detach "$W/wt2" origin/main; rel wt2 1.3.0 --dry-run 1.3.0
+needgen; fresh wt; git -C "$W/wt" worktree add -q --detach "$W/wt2" origin/main; rel wt2 1.3.0 --dry-run 1.3.0
 if [ "$RC" -eq 0 ]; then ok "releases from a git worktree add checkout, whose config git wrote"; else bad "releases from a git worktree add checkout, whose config git wrote" "exit $RC: $(tail -n 2 "$W/wt2.out")"; fi
 D=$(sed -n 's/^Files: //p' "$W/wt2.out"); [ -z "$D" ] || rm -rf "$D"
 fresh ghres; git -C "$W/ghres" config remote.origin.gh-resolved base; rel ghres 1.3.0 --dry-run 1.3.0
 if [ "$RC" -eq 0 ]; then ok "releases from a checkout where gh recorded its resolved remote"; else bad "releases from a checkout where gh recorded its resolved remote" "exit $RC: $(tail -n 2 "$W/ghres.out")"; fi
 D=$(sed -n 's/^Files: //p' "$W/ghres.out"); [ -z "$D" ] || rm -rf "$D"
+endgen
 fresh iattr; printf '* export-subst\n' > "$W/iattr/.git/info/attributes"; rel iattr 1.3.0 1.3.0
 if refused 'info/attributes is not empty' iattr; then ok "refuses a repository with a non-empty .git/info/attributes"; else bad "refuses a repository with a non-empty .git/info/attributes" "exit $RC: $(tail -n 2 "$W/iattr.out")"; fi
 fresh subst; printf '$Format:%%H$\n' > "$W/subst/stamp.txt"; printf 'stamp.txt export-subst\n' >> "$W/subst/.gitattributes"; git -C "$W/subst" add stamp.txt; recommit subst "A file git archive rewrites"
@@ -128,12 +147,13 @@ rel subst 1.3.0 1.3.0
 if refused 'is not the commit, at: stamp.txt' subst; then ok "refuses when a file git archive copied out is not the committed one"; else bad "refuses when a file git archive copied out is not the committed one" "exit $RC: $(tail -n 2 "$W/subst.out")"; fi
 fresh ignore; printf 'gird-fleet.sh export-ignore\n' >> "$W/ignore/.gitattributes"; recommit ignore "A file git archive leaves out"; rel ignore 1.3.0 1.3.0
 if refused 'is not the commit, at: gird-fleet.sh' ignore; then ok "refuses when git archive leaves a committed file out"; else bad "refuses when git archive leaves a committed file out" "exit $RC: $(tail -n 2 "$W/ignore.out")"; fi
-fresh replace; E=$(printf 'echo replaced\n' | git -C "$W/replace" hash-object -w --stdin); git -C "$W/replace" replace "$(git -C "$W/replace" rev-parse HEAD:gird-check.sh)" "$E"
+needgen; fresh replace; E=$(printf 'echo replaced\n' | git -C "$W/replace" hash-object -w --stdin); git -C "$W/replace" replace "$(git -C "$W/replace" rev-parse HEAD:gird-check.sh)" "$E"
 rel replace 1.3.0 1.3.0
 C=$(git -C "$W/replace.git" cat-file blob HEAD:gird-check.sh | sha)
 if [ "$RC" -eq 0 ] && grep -qx "$C  gird-check.sh" "$GH_LOG.sums"; then ok "a replace ref does not change what is released"; else bad "a replace ref does not change what is released" "exit $RC: $(tail -n 2 "$W/replace.out")"; fi
+endgen
 
-fresh order; printf '#!/usr/bin/env bash\n: > "%s/ran-gen"\n' "$W" > "$W/order/tools/gen.sh"; recommit order "A gen.sh that leaves a mark"
+fresh order; printf '#!/usr/bin/env bash\n: > "%s/ran-gen"\n' "$W" > "$W/order/tools/gen.sh"; nobuilt order; recommit order "A gen.sh that leaves a mark"
 rel order 1.3 1.3.0
 if refused 'confirmation did not match' order && [ ! -e "$W/ran-gen" ]; then ok "runs nothing from the checkout before the review is confirmed"; else bad "runs nothing from the checkout before the review is confirmed" "exit $RC, gen.sh ran: $([ -e "$W/ran-gen" ] && echo yes || echo no)"; fi
 if grep -q '^+: > ".*/ran-gen"$' "$W/order.out"; then ok "shows a change to tools/ in full before the review"; else bad "shows a change to tools/ in full before the review"; fi
@@ -175,7 +195,7 @@ SKIPPING=$SKIPPED
 
 # built NAME GEN: a repository whose gen.sh is GEN and whose list adds blindspot-built.sh as built.
 built() {
-  fresh "$1"; printf '%s\n' "$2" > "$W/$1/tools/gen.sh"; printf 'blindspot-built.sh built\n' >> "$W/$1/.github/release-files"
+  fresh "$1"; printf '%s\n' "$2" > "$W/$1/tools/gen.sh"; nobuilt "$1"; printf 'blindspot-built.sh built\n' >> "$W/$1/.github/release-files"
   recommit "$1" "A built file"
 }
 built nobuild '#!/usr/bin/env bash
@@ -209,18 +229,25 @@ rel both 1.3.0 1.3.0
 H=$(printf 'built\n' | sha)
 C=$(git -C "$W/both" cat-file blob HEAD:gird-check.sh | sha)
 if [ "$RC" -eq 0 ] && grep -qx "$H  blindspot-built.sh" "$GH_LOG.sums" && grep -qx "$C  gird-check.sh" "$GH_LOG.sums"; then ok "a committed file and a built file both land in SHA256SUMS"; else bad "a committed file and a built file both land in SHA256SUMS" "exit $RC: $(tail -n 2 "$W/both.out")"; fi
-G=$(tr '\n' ' ' < "$GH_LOG" 2>/dev/null)
-case "$G" in
-  "release create v1.3.0 "*/blindspot-built.sh\ */gird-check.ps1\ */gird-check.sh\ */gird-fleet.sh\ */SHA256SUMS\ */SHA256SUMS.sig\ *) ok "and both go to the GitHub release, in name order" ;;
-  *) bad "and both go to the GitHub release, in name order" "gh got: $G" ;;
-esac
+# gh's arguments after "release create v1.3.0", up to the first option, as file names.
+ghfiles() { awk 'NR > 3 && /^-/ { exit } NR > 3 { sub(/.*\//, ""); print }' "$GH_LOG" 2>/dev/null; }
+if [ "$(ghfiles)" = "$(git -C "$W/both" show HEAD:.github/release-files | awk '!/^[[:space:]]*#/ && NF == 2 { print $1 }' | LC_ALL=C sort; printf 'SHA256SUMS\nSHA256SUMS.sig')" ] && [ "$(head -n 3 "$GH_LOG" | tr '\n' ' ')" = "release create v1.3.0 " ]
+then ok "and both go to the GitHub release, in name order"; else bad "and both go to the GitHub release, in name order" "gh got: $(tr '\n' ' ' < "$GH_LOG" 2>/dev/null)"; fi
 if grep -q '  gird-fleet.sh$' "$GH_LOG.sums" 2>/dev/null; then ok "the list comes from the reviewed commit, not the working tree"; else bad "the list comes from the reviewed commit, not the working tree"; fi
 
 echo "release tool: a dry run"
+needgen
 fresh dry; rel dry 1.3.0 --dry-run 1.3.0
 D=$(sed -n 's/^Files: //p' "$W/dry.out")
 if [ "$RC" -eq 0 ] && [ -n "$D" ] && [ -f "$D/SHA256SUMS" ]; then ok "a dry run passes and keeps its files" "$D"; else bad "a dry run passes and keeps its files" "exit $RC: $(tail -n 3 "$W/dry.out")"; D=$W/none; fi
-want() { printf 'version v1.3.0\n'; for f in gird-check.ps1 gird-check.sh gird-fleet.sh; do printf '%s  %s\n' "$(git -C "$W/dry" cat-file blob "HEAD:$f" | sha)" "$f"; done; }
+# A committed file's SHA-256 comes from the commit; a built one's from the copy gen.sh built it in.
+want() {
+  printf 'version v1.3.0\n'
+  for f in $(released dry); do
+    if git -C "$W/dry" cat-file -e "HEAD:$f" 2>/dev/null; then printf '%s  %s\n' "$(git -C "$W/dry" cat-file blob "HEAD:$f" | sha)" "$f"
+    else printf '%s  %s\n' "$(sha < "$D/src/$f")" "$f"; fi
+  done
+}
 if [ -f "$D/SHA256SUMS" ] && want | cmp -s - "$D/SHA256SUMS"; then ok "SHA256SUMS is the version line, then each committed file's SHA-256, sorted"; else bad "SHA256SUMS is the version line, then each committed file's SHA-256, sorted" "$(cat "$D/SHA256SUMS" 2>/dev/null)"; fi
 if [ -f "$D/SHA256SUMS" ] && ! LC_ALL=C grep -q "$(printf '\r')" "$D/SHA256SUMS" && [ "$(tail -c 1 "$D/SHA256SUMS" | od -An -c | tr -d ' ')" = '\n' ] && [ "$(sed 1d "$D/SHA256SUMS" | awk '{ print $2 }')" = "$(sed 1d "$D/SHA256SUMS" | awk '{ print $2 }' | LC_ALL=C sort)" ]
 then ok "SHA256SUMS has LF line ends, a final newline and names in byte order"; else bad "SHA256SUMS has LF line ends, a final newline and names in byte order"; fi
@@ -237,10 +264,8 @@ if [ "$RC" -eq 0 ] && grep -q 'Released v1.3.0' "$W/full.out"; then ok "a releas
 if git -C "$W/full.git" -c gpg.ssh.allowedSignersFile="$W/full/.github/allowed_signers" tag -v v1.3.0 > "$W/tagv.txt" 2>&1 && [ "$(git -C "$W/full.git" rev-parse 'v1.3.0^{commit}')" = "$(git -C "$W/full" rev-parse HEAD)" ]
 then ok "it pushes a signed tag on HEAD that git tag -v accepts"; else bad "it pushes a signed tag on HEAD that git tag -v accepts" "$(head -n 3 "$W/tagv.txt")"; fi
 G=$(tr '\n' ' ' < "$GH_LOG" 2>/dev/null)
-case "$G" in
-  "release create v1.3.0 "*/gird-check.ps1\ */gird-check.sh\ */gird-fleet.sh\ */SHA256SUMS\ */SHA256SUMS.sig\ "-R test-owner/full "*--verify-tag*) ok "it creates the GitHub release with the five files" ;;
-  *) bad "it creates the GitHub release with the five files" "gh got: $G" ;;
-esac
+if [ "$(ghfiles)" = "$(released full; printf 'SHA256SUMS\nSHA256SUMS.sig')" ] && case "$G" in "release create v1.3.0 "*"SHA256SUMS.sig -R test-owner/full "*--verify-tag*) true ;; *) false ;; esac
+then ok "it creates the GitHub release with every listed file, SHA256SUMS and its signature"; else bad "it creates the GitHub release with every listed file, SHA256SUMS and its signature" "gh got: $G"; fi
 if [ -f "$GH_LOG.notes" ] && [ "$(cat "$GH_LOG.notes")" = "$(printf -- '- A change for the tests.\n- And a second one.')" ]; then ok "its notes are the version's CHANGELOG section"; else bad "its notes are the version's CHANGELOG section" "$(head -n 3 "$GH_LOG.notes" 2>/dev/null)"; fi
 
 echo "release tool: when publishing fails"
