@@ -3297,7 +3297,8 @@ while IFS= read -r f; do
   case "$f" in "$H/.claude/settings.json"|"$H/.claude/settings.local.json"|*/.claude/plugins/*) continue ;; esac
   own_cc "$f" && continue
   [ -f "$f" ] && ! too_big "$f" || continue
-  _t=$(flat "$f"); _w=""
+  # An awk that fails while flat reads the file names it as not read, never as one that sets nothing.
+  _t=$(flat "$f") || { cut_file "$f"; continue; }; _w=""
   # disableAllHooks as the project's settings leave it: settings.local.json comes before settings.json.
   # (Managed settings can set it too; they are not read here.)
   _dah=""
@@ -3382,7 +3383,7 @@ EOF
 while IFS= read -r f; do
   [ -n "$f" ] && [ -f "$f" ] && ! too_big "$f" || continue
   case "$f" in */.claude/plugins/*) continue ;; esac
-  _t=$(flat "$f"); _w=""
+  _t=$(flat "$f") || { cut_file "$f"; continue; }; _w=""
   _note=""
   printf '%s' "$_t" | grep -qE "$FOLDER_OPEN"; _hr=$?
   [ "$_hr" -gt 1 ] && cut_file "$f"

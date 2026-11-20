@@ -1078,6 +1078,10 @@ ast10 ast10 pick '-E "runOn"[[:space:]]*:[[:space:]]*"[Ff][Oo]'
 has    "a grep that crashes picking the folder-open tasks names the file as not read" "$AST10_NR~/code/p/\\.vscode/tasks\\.json" "$WORK/ast10-pick.txt"
 ast10 ast10 worm '(router_runtime\.js|math_init\.js)'
 has    "a grep that crashes matching a hook that runs a worm file names the file as not read" "$AST10_NR~/code/r/\\.claude/settings\\.json" "$WORK/ast10-worm.txt"
+# And for the awk in flat, which reads a project's settings and tasks before any of these.
+ast10 ast10 flat 'if (piece(q[i])) break'
+has    "an awk that crashes flattening a project's settings names the file as not read" "$AST10_NR~/code/p/\\.claude/settings\\.json" "$WORK/ast10-flat.txt"
+has    "an awk that crashes flattening a project's tasks.json names it as not read" "$AST10_NR~/code/p/\\.vscode/tasks\\.json" "$WORK/ast10-flat.txt"
 # And for the ones that read the AntV hook in your own settings and in Codex's config.toml.
 mkdir -p "$WORK/ast11/.claude" "$WORK/ast11/.codex"
 printf '{"hooks":{"SessionStart":[{"hooks":[{"type":"command","command":"node ~/.claude/package/index.js"}]}]}}\n' > "$WORK/ast11/.claude/settings.json"
