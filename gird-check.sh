@@ -738,7 +738,7 @@ drain_keys() {
   stty "$_rs" </dev/tty 2>/dev/null
 }
 
-PROG_FILE=""; SP_FILE=""; SP_PID=""; EARLY=0
+PROG_FILE=""; SP_FILE=""; SP_PID=""; EARLY=0; FLAT_CUT=""
 SESS_PID=""; SESS_FILTER_PID=""; SESS_DIR=""; SESS_FIFO=""; SESS_FILE=""; SESS_WIN=0
 cleanup() {
   spin_stop
@@ -749,6 +749,7 @@ cleanup() {
   if [ -n "$SAVED_TTY" ]; then stty "$SAVED_TTY" </dev/tty 2>/dev/null; SAVED_TTY=""; fi
   [ -n "$PROG_FILE" ] && rm -f "$PROG_FILE"
   [ -n "$SCAN_ERR" ] && rm -f "$SCAN_ERR"
+  [ -n "$FLAT_CUT" ] && rm -f "$FLAT_CUT"
   [ -n "$SP_FILE" ] && rm -f "$SP_FILE"
   [ -n "$SESS_DIR" ] && rm -rf "$SESS_DIR"
   [ -n "$FLEET_NR" ] && rm -f "$FLEET_NR"
@@ -1637,6 +1638,8 @@ PROG_FILE=$(mktemp "$TMPD/blindspot.XXXXXX" 2>/dev/null) || PROG_FILE=""
 # be written to, and with neither, every row it feeds reads partly checked (SCAN_LOST).
 SCAN_ERR=$(mktemp "$TMPD/blindspot.XXXXXX" 2>/dev/null || mktemp /tmp/blindspot.XXXXXX 2>/dev/null) || SCAN_ERR=""
 SCAN_LOST=0; [ -n "$SCAN_ERR" ] || SCAN_LOST=1
+# The files whose flat crashed (flat_cut), read back where section 2 names the files it could not read.
+FLAT_CUT=$(mktemp "$TMPD/blindspot.XXXXXX" 2>/dev/null || mktemp /tmp/blindspot.XXXXXX 2>/dev/null) || FLAT_CUT=""
 # An account run counts each folder the scan could not read as not checked, so it needs the file.
 if [ "$ACCTRUN" -eq 1 ] && [ -z "$SCAN_ERR" ]; then exit 13; fi
 game_start || spin_start "Checking your agents, configs and keys"
@@ -2472,6 +2475,14 @@ TAB=$(printf '\t')
 # U+1680, U+2000 to U+200B, U+202F, U+205F, U+3000 and U+FEFF as whitespace. As UTF-8 bytes, sed makes
 # the first two line breaks and the rest a space, in strings too, as a plain space there is, which the
 # matchers ignore: one sed pass is linear, where a regex split or gsub with many matches in awk is not.
+# An awk in flat that is killed by a signal names the file as not read (FLAT_CUT, and FLEET_NR in an
+# account run): flat is read through a pipe, whose status is its last command's, so its callers can't
+# see it fail. SIGPIPE is not counted: it means only that the reader stopped early, as json_top does.
+flat_cut() {
+  [ -n "$FLAT_CUT" ] && printf '%s\n' "$1" >> "$FLAT_CUT"
+  [ -n "$FLEET_NR" ] && printf '%s\n' "$1" >> "$FLEET_NR"
+  return 0
+}
 FLAT_SED="s/$(printf '\342\200[\250\251]')/\\
 /g
 $(printf 's/\302\240/ /g\ns/\341\232\200/ /g\ns/\342\200[\200\201\202\203\204\205\206\207\210\211\212\213\257]/ /g\ns/\342\201\237/ /g\ns/\343\200\200/ /g\ns/\357\273\277/ /g')"
@@ -2529,6 +2540,9 @@ flat() {
       }
       printf " "
     }'
+  _fr=$?
+  if [ "$_fr" -gt 128 ] && [ "$_fr" -ne 141 ]; then flat_cut "$1"; fi
+  return "$_fr"
 }
 auto_row() { # file what flattened-text [script-note]
   # A worm file counts only when a command runs it (worm_cmd), and a file projects use too only in a
@@ -8228,7 +8242,7 @@ $AA_TABLE
 EOF
 # One of these files that is there but can't be read, or is too big to, was not checked: section 2 names
 # it with the other settings files it could not read, so the summary doesn't read clean over it.
-_aau=$({ printf '%s\n' "$AA_TRIED" | unread_files big; printf '%s' "$AA_CUT"; } | awk 'length && !s[$0]++')
+_aau=$({ printf '%s\n' "$AA_TRIED" | unread_files big; printf '%s' "$AA_CUT"; [ -n "$FLAT_CUT" ] && cat "$FLAT_CUT"; } | awk 'length && !s[$0]++')
 if [ -n "$_aau" ]; then SEC2_UNREAD=$(printf '%s\n%s\n' "$SEC2_UNREAD" "$_aau" | awk 'length && !s[$0]++'); N_SEC2_UNREAD=$(count_lines "$SEC2_UNREAD"); fi
 # One row per file and agent: file<TAB>agent<TAB>settings. VS Code's settings file can hold two agents'.
 AA_LIST=$(printf '%s' "$AA_ROWS" | awk -F "$TAB" '{ k = $1 FS $2 } !(k in o) { o[k] = ++n; f[n] = $1; ag[n] = $2; st[n] = $3; next } { st[o[k]] = st[o[k]] ", " $3 }

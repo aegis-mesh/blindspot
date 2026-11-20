@@ -327,9 +327,10 @@ the run finished and 13 when it `failed`.
 - the result could not be saved;
 - it stopped before checking anything ([why](#how-the-one-file-runs)): there is no summary line then.
   A stop at one of the checks after the start records why, and the inventory field reads
-  `failed: refused <time>: <reason>`. A start without `-p`, and a hash-key in a saved-result folder
-  that is not root's alone, record nothing: the inventory field keeps its last value until it goes
-  stale, and only your MDM's log of the run (exit 13 and its message) says why.
+  `failed: refused <time>: <reason>`. A start without `-p` records nothing: the inventory field keeps
+  its last value until it goes stale, and only your MDM's log of the run (exit 13 and its message)
+  says why. A hash-key in a saved-result folder that is not root's alone stops every run too, and the
+  inventory field reads `unreadable` until the folder is root's alone again.
 
 **`act`** (exit 10): something to act on now:
 

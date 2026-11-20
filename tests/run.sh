@@ -1090,6 +1090,10 @@ ast10 ast11 uhook 'package([/\\]+'
 has    "a grep that crashes matching the AntV hook names your settings file as not read" "$AST10_NR~/\\.claude/settings\\.json" "$WORK/ast11-uhook.txt"
 ast10 ast11 toml 'hooks\.SessionStart([].]|$)'
 has    "an awk that crashes reading Codex's config.toml names it as not read" "$AST10_NR~/\\.codex/config\\.toml" "$WORK/ast11-toml.txt"
+# And for the awk in flat when it reads your own settings: its crash is told by flat itself, as the reader
+# after it in the pipe ends well.
+ast10 ast11 uflat 'if (piece(q[i])) break'
+has    "an awk that crashes flattening your own settings names the file as not read" "$AST10_NR~/\\.claude/settings\\.json" "$WORK/ast11-uflat.txt"
 # A session-start hook in your own settings counts only when it runs a file from .claude/package or
 # .codex/package, as the script an interpreter runs or as the command itself: a guard that tests for the
 # file, or a cleanup that deletes the folder, is not one. A word before the interpreter (nohup, VAR=), a
@@ -6673,6 +6677,12 @@ if grep -q 'd=/var/db/blindspot' "$OF/reader.sh" && [ "$_o1" = unreadable ] && [
   && [ "$_o3" = "failed: refused 2026-11-18T09:00Z: the file or a folder above it can be changed by an account other than root" ]; then
   ok "fleet one file: the guide's inventory reader prints unreadable where it can't read, never none"
 else bad "fleet one file: the guide's inventory reader prints unreadable where it can't read, never none" "[$_o1] [$_o2] [$_o3] [$_o4]"; fi
+# A folder that holds only a hash-key is one whose runs were refused (the key is kept where a folder
+# that is not root's alone would be moved aside): the reader says unreadable, as --inventory does.
+mkdir -p "$OF/rd-hk"; printf 'k\n' > "$OF/rd-hk/hash-key"
+_o1=$(of_reader "$OF/rd-hk")
+if [ "$_o1" = unreadable ]; then ok "fleet one file: the guide's inventory reader prints unreadable for a folder that holds only a hash-key"
+else bad "fleet one file: the guide's inventory reader prints unreadable for a folder that holds only a hash-key" "[$_o1]"; fi
 # Before the one file has finished a run: an earlier release's last.json alone, a first run that
 # stopped part-way, one still under way, and an attempt file that is not two numbers.
 mkdir -p "$OF/rd-old" "$OF/rd-killed" "$OF/rd-going" "$OF/rd-badat"; printf '{}\n' > "$OF/rd-old/last.json"

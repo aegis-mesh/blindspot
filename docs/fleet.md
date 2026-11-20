@@ -46,7 +46,8 @@ the line it prints.
 The field can also read `stale` (no run in 3 days), `none` (no run yet), `failed` (a run stopped
 part-way, could not save its result or refused to start, and why), `old-install` (an
 [earlier install](#moving-from-two-files) saved a result and the one file has not yet finished a run)
-or `unreadable`. Treat each of those as not checked.
+or `unreadable` (the saved result, or the folder that holds it, can't be read or is not root's
+alone). Treat each of those as not checked.
 
 The [full definitions](fleet-reference.md#outcomes-in-full) list everything each outcome covers.
 Start with the Macs whose value starts `v1 act`, then `v1 failed`, `v1 not_checked`, `failed` and
@@ -128,6 +129,7 @@ blindspot_inventory() {
     if [ "${#s}" -le 12 ] && [ "${#l}" -le 5 ] && s=$((10#$s)) && [ $(( $(/bin/date -u +%s) - s )) -gt "$l" ]; then
       echo "failed: the run started $(/bin/date -u -r "$s" +%Y-%m-%dT%H:%MZ) did not finish or could not save its result"
     else echo none; fi
+  elif [ -e "$d/hash-key" ] || [ -L "$d/hash-key" ]; then echo unreadable
   else echo none; fi
 }
 blindspot_inventory
