@@ -2,15 +2,15 @@
 
 For IT administrators. This page has two parts: macOS first, then [Windows](#windows).
 
-**Untested:** this page has not yet been run end to end on a real Mac. Menu paths and limits were
-checked on 2026-10-24 against
+**Untested:** this page has not yet been run end to end on a real Mac with Intune. Menu paths and
+limits were checked on 2026-10-24 against
 [Microsoft's guide to shell scripts on macOS](https://learn.microsoft.com/en-us/intune/device-management/tools/run-shell-scripts-macos).
 
 Read [docs/fleet.md](../fleet.md) first: what the check does and what each outcome means.
 [docs/fleet-reference.md](../fleet-reference.md#act-on-a-finding) says what to do about a finding.
 
-You add three things: a shell script that installs the scripts once, a shell script that runs the
-check, and a custom attribute that shows the result.
+You add two things: the file as a shell script that runs daily, and a custom attribute that shows the
+result. There is nothing to install first.
 
 ## Full Disk Access
 
@@ -24,47 +24,30 @@ codesign -dr - "/Library/Intune/Microsoft Intune Agent.app"
 
 Check the result: each account's `protected_folders` is `checked` once access works.
 
-## Install it once
-
-1. Prepare `blindspot-install.sh` as [docs/fleet.md](../fleet.md#1-install-it-once) says, from a
-   tagged release of `gird-check.sh` and `gird-fleet.sh` whose SHA-256 you checked. Use
-   `--deadline=3000` for Intune in the options line. This install step has not yet been run end to end
-   on a real Mac.
-   Optional: add the lines from [Install ripgrep (optional)](../fleet-reference.md#install-ripgrep-optional)
-   to its end, so large agent session stores take seconds per account rather than minutes.
-2. Read `blindspot-install.sh` before you upload it: it runs as root.
-3. In the Microsoft Intune admin center, select **Devices** > **By platform** > **macOS** >
-   **Manage devices** > **Scripts** > **Add**
-   ([Microsoft's guide](https://learn.microsoft.com/en-us/intune/device-management/tools/run-shell-scripts-macos#create-and-assign-a-shell-script-policy)).
-4. In **Basics**, name it `Blindspot install`, and select **Next**.
-5. In **Script settings**, upload `blindspot-install.sh`, set **Run script as signed-in user** to
-   **No**, leave **Script frequency** as **Not configured** so it runs once, and select **Next**.
-6. In **Assignments**, select the device groups, then **Review + add** > **Add**.
-
 ## Run it daily
 
-1. Save these lines as a file, `blindspot-check.sh`:
+1. Download `blindspot-fleet.sh` from a release and check it as
+   [docs/fleet.md](../fleet.md#1-download-the-file) says. Do not edit it.
+2. In the Microsoft Intune admin center, select **Devices** > **By platform** > **macOS** >
+   **Manage devices** > **Scripts** > **Add**
+   ([Microsoft's guide](https://learn.microsoft.com/en-us/intune/device-management/tools/run-shell-scripts-macos#create-and-assign-a-shell-script-policy)).
+3. In **Basics**, name it `Blindspot`, and select **Next**.
+4. In **Script settings**, upload `blindspot-fleet.sh` and set **Run script as signed-in user** to
+   **No**, so it runs as root. In **Script frequency**, choose once a day. Leave **Max number of times
+   to retry if script fails** as **Not configured**. Select **Next**.
+5. In **Assignments**, select the device groups, then **Review + add** > **Add**.
 
-   ```sh
-   #!/bin/bash
-   exec /usr/bin/env -i /bin/bash "/Library/Application Support/Blindspot/gird-fleet.sh"
-   ```
+With no options, the file runs `--all-users --exit-zero --summary-to-stdout --deadline=3000`.
 
-2. Add a second script the same way, named `Blindspot check`, uploading `blindspot-check.sh`.
-3. Set **Run script as signed-in user** to **No**, so it runs as root.
-4. In **Script frequency**, choose how often it runs; daily is suggested.
-5. Leave **Max number of times to retry if script fails** as **Not configured**.
-6. Assign it to the same device groups, then **Review + add** > **Add**.
+Optional: to read agent sessions with ripgrep, add a second script the same way, with the lines from
+[Install ripgrep (optional)](../fleet-reference.md#install-ripgrep-optional) saved as a file, and
+leave its **Script frequency** as **Not configured** so it runs once. Large agent session stores then
+take seconds per account rather than minutes.
 
 ## Show the result
 
-1. Save these lines as a file, `blindspot-inventory.sh`. They only read the saved result:
-
-   ```sh
-   #!/bin/bash
-   exec /usr/bin/env -i /bin/bash "/Library/Application Support/Blindspot/gird-fleet.sh" --inventory --stale-days=3
-   ```
-
+1. Save the lines from [step 3 of docs/fleet.md](../fleet.md#3-show-the-result) as a file,
+   `blindspot-inventory.sh`. They only read the saved result.
 2. Select **Devices** > **By platform** > **macOS** > **Organize devices** >
    **Custom attributes for macOS** > **Add**
    ([Microsoft's guide](https://learn.microsoft.com/en-us/intune/device-management/tools/run-shell-scripts-macos#create-and-assign-a-custom-attribute-for-macos-devices)).
@@ -73,37 +56,68 @@ Check the result: each account's `protected_folders` is `checked` once access wo
    `blindspot-inventory.sh` as the **Script**, and select **Next**.
 5. In **Assignments**, select the same device groups, then **Review + add** > **Add**.
 
+## Moving from the two-file install
+
+If you set Blindspot up with `Blindspot install` and `Blindspot check` scripts from an earlier
+release, first remove the `Blindspot check` script's assignments, so two checks do not run. Then add
+the script above, replace the custom attribute's file with `blindspot-inventory.sh`, and remove
+`Blindspot install`. Then remove the old files as
+[docs/fleet.md](../fleet.md#moving-from-two-files) says. Until they are gone, the result says
+`old-install`.
+
 ## What you should see
 
 In **Custom attributes** > `Blindspot` > **Device status**, the **Result** column shows one line per
 Mac, such as:
 
 ```
-v1 act 2026-10-25T09:12Z | asha: act incidents tanstack; keys 2 anthropic,aws | itadmin: clear
+v1 act 2026-10-25T09:12Z | asha: act incidents tanstack; keys 2 anthropic,aws | itadmin: clear | owasp.ASI03:1 owasp.ASI04:1; counted 2
 ```
 
-It starts with the Mac's outcome: `act`, `review`, `not_checked` or `clear` (see
-[docs/fleet.md](../fleet.md#what-you-get)). `stale: last run <time>` means no check in 3 days,
-`none` means the check has not run yet, `failed` means the last run stopped part-way, and
-`unreadable` means the saved result could not be trusted. Treat each of those, and an empty result, as not checked.
+It starts with the Mac's outcome: `failed`, `act`, `review`, `not_checked` or `clear` (see
+[docs/fleet.md](../fleet.md#what-you-get)). A Mac whose OWASP tags could not be worked out reads
+`v1 failed` even when it has findings to act on, so a filter on `v1 act` misses it: filter for
+`v1 failed` too. `stale: last run <time>` means no check in 3 days, `none` means the check has not run
+yet, `failed` means the last run stopped part-way or refused to start (the reason follows),
+`old-install` means the one file has not yet finished a run where an earlier install saved a result,
+and `unreadable` means the saved result could not be trusted or read. Treat each of those, and an
+empty result, as not checked.
 
-In **Scripts** > `Blindspot check` > **Device status**, **Success** means the check finished.
-**Failed** means it could not run safely (`failed`), or Intune stopped it.
+The `owasp.` part at the end names the OWASP risks found
+([OWASP tags](../fleet-reference.md#owasp-tags)); to list the Macs with one, filter for values that
+contain `owasp.ASI03`. The value carries the part only when it has room, so a Mac with no room for it
+does not match; the saved result, `last.json`, always carries it.
+
+In **Scripts** > `Blindspot` > **Device status**, **Success** means the check finished. **Failed**
+means it could not run safely or stopped before it started (`failed`), or Intune stopped it.
+
+To see every Mac in one report, export the **Result** column as a CSV file and run `gird-report.ps1`
+on it: [one report for every computer](../fleet.md#one-report-for-every-computer).
 
 ## Intune's limits
 
 Checked 2026-10-24:
 
-- A shell script file must be less than 1 MB. The install script, with both files in it, is about 0.5 MB.
+- A shell script file must be less than 1 MB. `blindspot-fleet.sh` is about 750 KB. `tools/gen.sh`
+  warns when a release's file reaches 800,000 bytes, and does not build one of 1,000,000 bytes or
+  more.
 - A shell script that runs longer than 60 minutes is stopped and reported as failed.
   `--deadline=3000` aims to finish the check within 50 minutes.
 - A shell script runs as root unless **Run script as signed-in user** is **Yes**.
-- A non-zero exit code reads **Failed**, so the check uses `--exit-zero`.
+- A shell script must start with `#!` and a shell (checked 2026-11-18). The file starts
+  `#!/bin/bash -p`, and stops (exit 13) if it was started without `-p`. The guide does not say
+  outright that the agent starts the file by that line; if the output says
+  `start it as its first line says`, it did not.
+- Microsoft's guide does not say where the agent writes a script before running it. If the output
+  says `must be owned by root and writable by no one else`, it names that folder; please
+  [report it](https://github.com/aegis-mesh/blindspot/issues/new/choose)
+  ([why it matters](../fleet-reference.md#how-the-one-file-runs)).
+- A non-zero exit code reads **Failed**. With no options the file exits 0 whenever the check
+  finished, so only a run that `failed` reads **Failed**.
 - Custom attribute scripts run every 8 hours. The value must be 20 KB or less; Blindspot's is at
   most 250 characters. A script that exits non-zero reads **Failed**.
-- Microsoft's guide does not say which account a custom attribute script runs as. The reader needs
-  root: run as another account, it writes `needs root` to standard error and exits 13, so the
-  attribute gets no value and reads **Failed**.
+- Microsoft's guide does not say which account a custom attribute script runs as. The lines need
+  root: run as another account, they print `unreadable`.
 - Scripts need the Intune management agent, at `/Library/Intune/Microsoft Intune Agent.app`.
 
 ## Windows
@@ -164,6 +178,24 @@ The line starts with the outcome: `act`, `review`, `not_checked`, `clear` or `fa
 [Why a run reads `failed`](../fleet.md#why-a-run-reads-failed) for the reasons. A PC with no output,
 or an exit code you do not expect, was not checked. The script exits 1 unless the outcome is
 `clear`, which Intune lists as a PC with issues.
+
+### Or let gird-intune.ps1 do it
+
+`gird-intune.ps1`, from the same release, is an optional tool that does the steps above for you and
+exports the results for [the fleet report](../fleet.md#one-report-for-every-computer). It runs on
+your own PC, in Windows PowerShell 5.1 or PowerShell 7. It signs in to Microsoft Graph as you, with
+Microsoft's own module, `Microsoft.Graph.Authentication`, and sends nothing anywhere else. Before it
+signs in, it prints the permissions it will ask for: the fewest each command needs. It has not yet
+been run against a real Intune tenant: its tests use a stand-in for Microsoft Graph.
+
+| Command | What it does |
+|---|---|
+| `gird-intune.ps1 -Deploy -Group <name>` | Adds `blindspot-fleet.ps1`, from next to it or from `-FleetScript <path>`, as a Remediation for that group only: run as the signed-in person, in 64-bit PowerShell, once a day, with no remediation script. Run again with a newer release, it updates the one it made. |
+| `gird-intune.ps1 -Export <file.csv>` | Writes each PC's latest result to a new CSV file, with a row for each Windows PC in the assigned groups that has no result yet. |
+| `gird-intune.ps1 -Remove` | Shows the Remediation it made and asks before deleting it. `-Force` skips the question. |
+
+`-WhatIf` with `-Deploy` or `-Remove` shows what would change and changes nothing. On Windows, run it
+as `powershell -ExecutionPolicy Bypass -File .\gird-intune.ps1 -Deploy -Group "<name>"`.
 
 ### Intune's limits
 
