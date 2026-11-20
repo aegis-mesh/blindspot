@@ -8497,7 +8497,8 @@ NPM_INCS=" $(printf '%s\n' "$BAD_NPM" | awk '{ print $3 }' | sort -u | tr '\n' '
 # with that incident's extensions (EXT_KEY). A line counts when the key's type and then the key itself
 # are two of its fields, whatever options come before them or comment after: a comment alone never
 # counts. A file, or a .ssh folder, that can't be read leaves the check not done in full
-# (SSHK_UNREAD), never clean.
+# (SSHK_UNREAD), never clean: so does anything but a regular file (a pipe would hold the read for
+# ever, a link to a device never end it), and a file over READ_MAX. /dev/null holds nothing.
 EXT_KEY=""; EXT_KEY_TAGS=""; SSHK_UNREAD=0; _akf="$H/.ssh/authorized_keys"
 if [ ! -e "$_akf" ]; then
   # Not there, or there and out of reach: a .ssh folder that can't be listed, or that lists the file
@@ -8508,6 +8509,8 @@ if [ ! -e "$_akf" ]; then
   fi
 else
   if [ -d "$_akf" ] || [ ! -r "$_akf" ]; then SSHK_UNREAD=1
+  elif [ "$_akf" -ef /dev/null ]; then :
+  elif [ ! -f "$_akf" ] || too_big "$_akf"; then SSHK_UNREAD=1
   elif _akh=$(SSHK=$SSH_PLANTED awk '
       BEGIN { n = split(ENVIRON["SSHK"], L, "\n"); for (i = 1; i <= n; i++) { split(L[i], f, "|"); inc[i] = f[1]; t[i] = f[2]; k[i] = f[3]; nt[i] = f[4] } }
       { sub(/\r$/, ""); for (j = 2; j <= NF; j++) for (i = 1; i <= n; i++) if ($j == k[i] && $(j - 1) == t[i] && !s[i]++) print inc[i] "\t" nt[i] }' "$_akf" 2>/dev/null); then

@@ -7594,7 +7594,8 @@ $NpmIncs = @($BadNpm -split "`r?`n" | ForEach-Object { @($_ -split ' ')[2] })
 $ExtKey = New-Object System.Collections.Generic.List[object]; $ExtKeyTags = New-Object System.Collections.Generic.List[string]; $SshkUnread = 0
 $sshDir = J $HomeDir '.ssh'; $akf = J $sshDir 'authorized_keys'; $akt = $null
 if (Exists $akf) {
-  if (Is-Dir $akf) { $SshkUnread = 1 } else { try { $akt = [IO.File]::ReadAllText($akf) } catch { $SshkUnread = 1 } }
+  # A pipe or device (Is-Special) and a file over ReadMax are not read either, as in gird-check.sh.
+  if ((Is-Dir $akf) -or (Is-Special $akf) -or (Too-Big $akf)) { $SshkUnread = 1 } else { try { $akt = [IO.File]::ReadAllText($akf) } catch { $SshkUnread = 1 } }
 } elseif (Is-Dir $sshDir) {
   # Not there, or there and out of reach: a .ssh folder that can't be listed, or that lists the file
   # but can't be entered, or a link to nothing.

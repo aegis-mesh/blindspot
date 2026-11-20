@@ -2671,6 +2671,21 @@ has    "and row 05 says authorized_keys was not fully checked" 'Recent leaks +SS
 rm -rf "$WORK/dz-cxkd"; cp -R "$WORK/dz-cxku" "$WORK/dz-cxkd"; chmod 000 "$WORK/dz-cxkd/.ssh"
 dzrun "$WORK/dz-cxkd" | tr -s ' \n' '  ' > "$WORK/dz-cxkd.txt"; chmod 700 "$WORK/dz-cxkd/.ssh"
 has    "a .ssh folder it can't open is not fully checked either" 'Editor extensions not fully checked: ~/\.ssh/authorized_keys could not be read' "$WORK/dz-cxkd.txt"
+# A pipe at authorized_keys is never read, as a read of one waits for ever, and one over the size every
+# file read is held to (16 MiB) is not read either: each is named not fully checked. The run gets 60 s
+# and is killed and failed after.
+rm -rf "$WORK/dz-cxkp" "$WORK/dz-cxkb"; cp -R "$WORK/dz-cxku" "$WORK/dz-cxkp"; cp -R "$WORK/dz-cxku" "$WORK/dz-cxkb"
+rm -f "$WORK/dz-cxkp/.ssh/authorized_keys"; mkfifo "$WORK/dz-cxkp/.ssh/authorized_keys"
+python3 -c 'import sys; f = open(sys.argv[1], "r+b"); f.truncate(16777217)' "$WORK/dz-cxkb/.ssh/authorized_keys"
+dzrun "$WORK/dz-cxkp" > "$WORK/dz-cxkp-raw.txt" &
+BP=$!; for _i in $(seq 1 600); do kill -0 "$BP" 2>/dev/null || break; sleep 0.1; done
+if kill -0 "$BP" 2>/dev/null; then pkill -9 -P "$BP" 2>/dev/null; kill -9 "$BP" 2>/dev/null; printf 'the check did not finish in 60 s\n' > "$WORK/dz-cxkp-raw.txt"; fi
+wait "$BP" 2>/dev/null
+tr -s ' \n' '  ' < "$WORK/dz-cxkp-raw.txt" > "$WORK/dz-cxkp.txt"
+dzrun "$WORK/dz-cxkb" | tr -s ' \n' '  ' > "$WORK/dz-cxkb.txt"
+has    "a pipe at authorized_keys does not hold up the check" 'Your AI Exposure Check' "$WORK/dz-cxkp.txt"
+has    "and is not fully checked"                       'Editor extensions not fully checked: ~/\.ssh/authorized_keys could not be read' "$WORK/dz-cxkp.txt"
+has    "an authorized_keys over 16 MiB is not fully checked" 'Editor extensions not fully checked: ~/\.ssh/authorized_keys could not be read' "$WORK/dz-cxkb.txt"
 # GlassWorm's LaunchAgent next to another incident's extension (Nx Console) is a file to check, not
 # GlassWorm's sign: people name their own LaunchAgents that way.
 rm -rf "$WORK/dz-nxgw"; cp -R "$WORK/dz-nx" "$WORK/dz-nxgw"; mkdir -p "$WORK/dz-nxgw/Library/LaunchAgents"; : > "$WORK/dz-nxgw/Library/LaunchAgents/com.user.nodestart.plist"
