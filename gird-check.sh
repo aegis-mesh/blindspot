@@ -3083,13 +3083,13 @@ rc_read() { # file format fid rep
       # json_leaves keeps the first 4096 characters of a longer string and ends it in \003 (lg): a rule
       # is read only as far as its first 256 (fixed), so one such is read as having more after them.
       FMT == "claude" && p ~ ("^" S "permissions" S "(allow|ask|deny)\\[\\]$") && v ~ /^"/ {
-        d = substr(p, 14, length(p) - 15); v = unq(v); lg = sub(/\003$/, "", v)
+        d = substr(p, 14, length(p) - 15); v = unq(v); lg = sub("\003$", "", v)
         # Bash and PowerShell are two tools (KD), and PowerShell rules match without case.
         if (v == "Bash" || v == "PowerShell") { RC_RAW = v; out(d, 0, 0, v, "*") }
         else if (match(v, /^(Bash|PowerShell)\(/) && (lg || v ~ /\)$/)) { kd = substr(v, 1, RLENGTH - 1); w = fixed(substr(v, RLENGTH + 1, length(v) - RLENGTH - (lg ? 0 : 1)), "claude"); if (w == "*") RC_RAW = v; out(d, 0, kd == "PowerShell", kd, w) }
       }
       FMT == "gemini-json" && v ~ /^"/ {
-        v = unq(v); lg = sub(/\003$/, "", v); sh = (v == "run_shell_command" || v == "ShellTool")
+        v = unq(v); lg = sub("\003$", "", v); sh = (v == "run_shell_command" || v == "ShellTool")
         if (p == S "tools" S "core[]") core = 1
         if (p == S "tools" S "allowed[]" || p == S "tools" S "core[]") {
           r = p == S "tools" S "core[]" ? 4.25 : 4.3
@@ -3105,18 +3105,18 @@ rc_read() { # file format fid rep
         k = substr(p, 34); m = index(k, S)
         if (m) { if (substr(k, m + 1) != "approve") next; k = substr(k, 1, m - 1) }
         # A regex key cut short has lost its flags: it is not read.
-        if (sub(/\003$/, "", k) && k ~ /^\//) { rccut(); next }
+        if (sub("\003$", "", k) && k ~ /^\//) { rccut(); next }
         gsub(/\\\\/, "\001", k); gsub(/\\"/, "\"", k); gsub(/\001/, "\\", k)
         d = v == "true" ? "allow" : "deny"
         if (match(k, /^\/.+\/[dgimsuvy]*$/)) { f = k; sub(/^.*\//, "", f); outrx(d, 0, index(f, "i") > 0, "", substr(k, 2, length(k) - length(f) - 2), "rx", k) }
         else out(d, 0, 0, "", fixed(k, "prefix"))
       }
       FMT == "roo" && (p == S "roo-cline.allowedCommands[]" || p == S "roo-cline.deniedCommands[]") && v ~ /^"/ {
-        v = unq(v); sub(/\003$/, "", v)
+        v = unq(v); sub("\003$", "", v)
         w = fixed(v, "str"); if (w == "*") RC_RAW = v; out(p ~ /allowed/ ? "allow" : "deny", length(v), 1, "", w)
       }
       FMT == "amazonq" && (p == QK "allowedCommands[]" || p == QK "deniedCommands[]") && v ~ /^"/ {
-        v = unq(v); sub(/\003$/, "", v)
+        v = unq(v); sub("\003$", "", v)
         outrx(p ~ /allowed/ ? "allow" : "deny", 0, 0, "", v, "rxfull", v)
       }
       END { if (nar) out("deny", 4.29, 0, "", "*"); if (core) out("deny", 4.24, 0, "", "*") }' ;;
