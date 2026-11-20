@@ -2783,9 +2783,10 @@ Login (J $HomeDir '.local/share/opencode/auth.json') 'OpenCode provider keys' 'o
 Login (J $HomeDir '.railway/config.json') 'Railway login' 'railway'
 # Data platforms' own files, found as gird-check.sh finds them: Databricks configuration profiles, dbt's
 # profiles.yml (a value taken from env_var is not in the file), and Snowflake's connections.toml and
-# config.toml in the folder Snowflake CLI picks.
-Login (J $HomeDir '.databrickscfg') 'Databricks logins' 'databricks' '(?m)^[ \t]*(token|client_secret)[ \t]*='
-Login (J (Env-Or 'DBT_ENGINE_PROFILES_DIR' (Env-Or 'DBT_PROFILES_DIR' (J $HomeDir '.dbt'))) 'profiles.yml') 'dbt warehouse passwords' 'dbt' '(?m)^[ \t]*(password|token|private_key_passphrase|client_secret|refresh_token)[ \t]*:[ \t]*["'']?[A-Za-z0-9_+/=.~-]'
+# config.toml in the folder Snowflake CLI picks, each listed when a line sets one of the secrets
+# gird-check.sh names.
+Login (J $HomeDir '.databrickscfg') 'Databricks logins' 'databricks' '(?m)^[ \t]*(token|client_secret|azure_client_secret|password)[ \t]*='
+Login (J (Env-Or 'DBT_ENGINE_PROFILES_DIR' (Env-Or 'DBT_PROFILES_DIR' (J $HomeDir '.dbt'))) 'profiles.yml') 'dbt warehouse passwords' 'dbt' '(?m)^[ \t]*(password|token|private_key|private_key_passphrase|client_secret|refresh_token)[ \t]*:[ \t]*["'']?[A-Za-z0-9_+/=.~-]'
 $sf = $null
 if ($env:SNOWFLAKE_HOME) { if (Is-Dir $env:SNOWFLAKE_HOME) { $sf = $env:SNOWFLAKE_HOME } }
 elseif (Is-Dir (J $HomeDir '.snowflake')) { $sf = J $HomeDir '.snowflake' }
@@ -2796,7 +2797,7 @@ if (-not $sf) {
   elseif ((Get-Variable IsMacOS -ValueOnly -ErrorAction SilentlyContinue)) { $sf = J $HomeDir 'Library/Application Support/snowflake' }
   else { $sf = J (Env-Or 'XDG_CONFIG_HOME' (J $HomeDir '.config')) 'snowflake' }
 }
-Login @((J $sf 'connections.toml'), (J $sf 'config.toml')) 'Snowflake logins' 'snowflake' '(?m)^[ \t]*(password|private_key_passphrase)[ \t]*='
+Login @((J $sf 'connections.toml'), (J $sf 'config.toml')) 'Snowflake logins' 'snowflake' '(?m)^[ \t]*(password|token|oauth_client_secret|private_key_raw|private_key_passphrase|private_key_file_pwd)[ \t]*='
 $N_SSH = 0; $N_SSH_OPEN = 0
 $SshDir = J $HomeDir '.ssh'
 if (Is-Dir $SshDir) {

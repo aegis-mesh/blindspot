@@ -3543,9 +3543,12 @@ login "$H/.railway/config.json" "Railway login" railway
 # profiles.yml, found as dbt finds it (docs.getdbt.com; a value taken from env_var is not in the file),
 # and Snowflake's connections.toml and config.toml, in the folder Snowflake CLI picks
 # (docs.snowflake.com): SNOWFLAKE_HOME when it is set and there, else ~/.snowflake when it is there,
-# else the system's own folder.
-login "$H/.databrickscfg" "Databricks logins" databricks '^[[:space:]]*(token|client_secret)[[:space:]]*='
-login "${_dbd:-$H/.dbt}/profiles.yml" "dbt warehouse passwords" dbt '^[[:space:]]*(password|token|private_key_passphrase|client_secret|refresh_token)[[:space:]]*:[[:space:]]*["'\'']?[A-Za-z0-9_+/=.~-]'
+# else the system's own folder. A file is listed when a line sets one of the secrets its tool's docs
+# name: Databricks' token, client secrets (azure_client_secret for an Entra service principal) and
+# password; dbt's passwords, tokens and an inline private_key; Snowflake's password, OAuth token and
+# client secret, and an inline private key or the password of a key file.
+login "$H/.databrickscfg" "Databricks logins" databricks '^[[:space:]]*(token|client_secret|azure_client_secret|password)[[:space:]]*='
+login "${_dbd:-$H/.dbt}/profiles.yml" "dbt warehouse passwords" dbt '^[[:space:]]*(password|token|private_key|private_key_passphrase|client_secret|refresh_token)[[:space:]]*:[[:space:]]*["'\'']?[A-Za-z0-9_+/=.~-]'
 _sf=""
 if [ -n "$_sfh" ]; then [ -d "$_sfh" ] && _sf=$_sfh
 elif [ -d "$H/.snowflake" ]; then _sf=$H/.snowflake; fi
@@ -3553,7 +3556,7 @@ if [ -z "$_sf" ]; then
   case "$_os" in win) _sf=$WLAPP/snowflake ;; mac) _sf="$H/Library/Application Support/snowflake" ;; *) _sf=${XDG_CONFIG_HOME:-$H/.config}/snowflake ;; esac
 fi
 for _sfc in connections.toml config.toml; do
-  case " $LOGIN_IDS " in *" snowflake "*) ;; *) login "$_sf/$_sfc" "Snowflake logins" snowflake '^[[:space:]]*(password|private_key_passphrase)[[:space:]]*=' ;; esac
+  case " $LOGIN_IDS " in *" snowflake "*) ;; *) login "$_sf/$_sfc" "Snowflake logins" snowflake '^[[:space:]]*(password|token|oauth_client_secret|private_key_raw|private_key_passphrase|private_key_file_pwd)[[:space:]]*=' ;; esac
 done
 if [ "$WIN" -eq 1 ]; then # where these tools keep the same logins on Windows
   case " $LOGIN_IDS " in *" gcloud "*) ;; *) login "$WAPP/gcloud/application_default_credentials.json" "Google Cloud login" gcloud ;; esac

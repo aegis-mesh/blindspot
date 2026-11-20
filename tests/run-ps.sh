@@ -3500,8 +3500,8 @@ printf 'app:\n  outputs:\n    dev:\n      type: postgres\n      password: "%s"\n
 printf '[default]\naccount = "a"\nuser = "u"\npassword = "%s"\n' "$_sec" > "$LG/has/.snowflake/connections.toml"
 printf '[{"client_id": "%s", "tenant": "t", "certificate": "/home/me/sp.pem"}]\n' "$(rnd 8)" > "$LG/none/.azure/service_principal_entries.json"
 printf '[DEFAULT]\nhost = https://example.cloud.databricks.com\nauth_type = databricks-cli\n' > "$LG/none/.databrickscfg"
-printf 'app:\n  outputs:\n    dev:\n      type: postgres\n      password: "{{ env_var(%sDBT_PASSWORD%s) }}"\n' "'" "'" > "$LG/none/.dbt/profiles.yml"
-printf '[default]\naccount = "a"\nauthenticator = "externalbrowser"\n' > "$LG/none/.snowflake/connections.toml"
+printf 'app:\n  outputs:\n    dev:\n      type: postgres\n      password: "{{ env_var(%sDBT_PASSWORD%s) }}"\n      private_key_path: /home/me/rsa_key.p8\n' "'" "'" > "$LG/none/.dbt/profiles.yml"
+printf '[default]\naccount = "a"\nauthenticator = "externalbrowser"\nprivate_key_file = "/home/me/rsa_key.p8"\ntoken_file_path = "/home/me/token"\n' > "$LG/none/.snowflake/connections.toml"
 cp "$LG/has/.azure/service_principal_entries.json" "$LG/env/az/"; cp "$LG/has/.dbt/profiles.yml" "$LG/env/dbtp/"; cp "$LG/has/.snowflake/connections.toml" "$LG/env/sf/"
 # The system's own folder, as gird-check.sh picks it: Application Support on a Mac, ~/.config on Linux.
 cp "$LG/has/.snowflake/connections.toml" "$LG/sys/Library/Application Support/snowflake/config.toml"
@@ -3510,10 +3510,28 @@ for _h in has none sys; do psrun "$LG/$_h" -- -Offline 2>&1 | tr -s ' \n' '  ' >
 psrun "$LG/env" AZURE_CONFIG_DIR="$LG/env/az" DBT_PROFILES_DIR="$LG/env/dbtp" SNOWFLAKE_HOME="$LG/env/sf" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$LG/env.txt"
 _want='Azure service principal secrets.*Databricks logins.*dbt warehouse passwords.*Snowflake logins'
 has    "lists the Azure, Databricks, dbt and Snowflake login files that hold a secret" "$_want" "$LG/has.txt"
-hasnot "but not one with only a certificate, a host, an env_var or a browser login" 'Azure service principal|Databricks logins|dbt warehouse|Snowflake logins' "$LG/none.txt"
+hasnot "but not one with only a certificate, a host, a key file's path, an env_var or a browser login" 'Azure service principal|Databricks logins|dbt warehouse|Snowflake logins' "$LG/none.txt"
 has    "and follows AZURE_CONFIG_DIR, DBT_PROFILES_DIR and SNOWFLAKE_HOME" 'Azure service principal secrets.*dbt warehouse passwords.*Snowflake logins' "$LG/env.txt"
 has    "and finds Snowflake's file in the system's own folder" 'Snowflake logins' "$LG/sys.txt"
-if grep -aqF "$_sec" "$LG/has.txt" "$LG/env.txt"; then bad "and never prints what a login file holds"; else ok "and never prints what a login file holds"; fi
+# The other secrets each tool's docs name, one home for each run: Databricks' azure_client_secret
+# (an Entra service principal) and password, dbt's inline private_key (a key pair with no passphrase),
+# and Snowflake's OAuth token, oauth_client_secret, private_key_raw and private_key_file_pwd.
+_pk="-----BEGIN ""PRIVATE KEY-----\\n$(rnd 64)\\n-----END ""PRIVATE KEY-----"
+for _h in s1 s2 s3 s4; do mkdir -p "$LG/$_h/.snowflake" "$LG/$_h/AppData/Roaming" "$LG/$_h/AppData/Local/Temp"; done
+mkdir -p "$LG/s1/.dbt"
+printf '[DEFAULT]\nhost = https://example.azuredatabricks.net\nazure_client_id = %s\nazure_client_secret = %s\n' "$(rnd 8)" "$_sec" > "$LG/s1/.databrickscfg"
+printf 'app:\n  outputs:\n    dev:\n      type: snowflake\n      private_key: "%s"\n' "$_pk" > "$LG/s1/.dbt/profiles.yml"
+printf '[default]\naccount = "a"\nauthenticator = "oauth"\ntoken = "%s"\n' "$_sec" > "$LG/s1/.snowflake/connections.toml"
+printf '[DEFAULT]\nhost = https://example.cloud.databricks.com\nusername = me\npassword = %s\n' "$_sec" > "$LG/s2/.databrickscfg"
+printf '[default]\naccount = "a"\noauth_client_secret = "%s"\n' "$_sec" > "$LG/s2/.snowflake/connections.toml"
+printf '[default]\naccount = "a"\nprivate_key_raw = "%s"\n' "$_pk" > "$LG/s3/.snowflake/connections.toml"
+printf '[default]\naccount = "a"\nprivate_key_file = "/home/me/rsa_key.p8"\nprivate_key_file_pwd = "%s"\n' "$_sec" > "$LG/s4/.snowflake/connections.toml"
+for _h in s1 s2 s3 s4; do psrun "$LG/$_h" -- -Offline 2>&1 | tr -s ' \n' '  ' > "$LG/$_h.txt"; done
+has    "lists Databricks' azure_client_secret, dbt's inline private_key and Snowflake's OAuth token" 'Databricks logins.*dbt warehouse passwords.*Snowflake logins' "$LG/s1.txt"
+has    "lists Databricks' password and Snowflake's OAuth client secret" 'Databricks logins.*Snowflake logins' "$LG/s2.txt"
+has    "lists Snowflake's inline private key"            'Snowflake logins' "$LG/s3.txt"
+has    "lists the password of Snowflake's key file"      'Snowflake logins' "$LG/s4.txt"
+if grep -aqF "$_sec" "$LG/has.txt" "$LG/env.txt" "$LG/s1.txt" "$LG/s2.txt" "$LG/s4.txt"; then bad "and never prints what a login file holds"; else ok "and never prints what a login file holds"; fi
 # A dbt password in single quotes is one too, and Snowflake's Windows folder is not read off Windows.
 for _h in sq win; do cp -R "$WORK/clean" "$LG/$_h"; done
 mkdir -p "$LG/sq/.dbt" "$LG/win/AppData/Local/snowflake"
