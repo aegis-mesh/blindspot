@@ -3551,7 +3551,7 @@ has    "remote commands: the fix says to remove the rules or ask first" 'Remove 
 rm -rf "$WORK/rc1"; cp -R "$WORK/clean" "$WORK/rc1"; mkdir -p "$WORK/rc1/.codex/rules"
 printf 'prefix_rule(pattern=["ssh"])\n' > "$WORK/rc1/.codex/rules/default.rules"
 dzrun "$WORK/rc1" GIRD_CHECK_COMPACT=1 | tr -s ' \n' '  ' > "$WORK/rc1-c.txt"
-has    "remote commands: row 01 counts the agents" 'Coding agents [0-9]+ found, rules let 1 agent run commands' "$WORK/rc1-c.txt"
+has    "remote commands: row 01 counts the agents" 'Coding agents [0-9]+ found, 1 can run commands on other machines' "$WORK/rc1-c.txt"
 # A deny or ask rule drops a hit only when nothing narrows it after its wildcard; a rule with no
 # wildcard counts only with more words than the command; an open rule shorter than the command
 # allows every such command.
@@ -3667,7 +3667,7 @@ has    "remote commands: PowerShell allowed whole is listed as allowing every co
 hasnot "remote commands: near miss: a rule with text after its wildcard alone is not" '\* --version' "$WORK/rca.txt"
 has    "remote commands: and Bash in ~/.claude/settings.local.json, which section 1 does not list" '! Claude Code ~/\.claude/settings\.local\.json Bash: allows every command, including ones that run commands on other machines over SSH' "$WORK/rca.txt"
 has    "remote commands: and PowerShell(*) in a project's local file" '! Claude Code ~/code/a/\.claude/settings\.local\.json PowerShell\(\*\): allows every command' "$WORK/rca.txt"
-has    "remote commands: and PowerShell in a project's shared file, in section 2" '! ~/code/b/\.claude/settings\.json Set to run commands on other machines without asking, with permissions\.allow: PowerShell\. Claude Code applies' "$WORK/rca.txt"
+has    "remote commands: and PowerShell in a project's shared file, in section 2" '! ~/code/b/\.claude/settings\.json Set to run every command without asking, with permissions\.allow: PowerShell\. Claude Code applies' "$WORK/rca.txt"
 has    "remote commands: Gemini CLI's shell tool allowed whole" '! Gemini CLI ~/\.gemini/settings\.json run_shell_command: allows every command' "$WORK/rca.txt"
 has    "remote commands: and a Gemini CLI policy with no command" '! Gemini CLI ~/\.gemini/policies/a\.toml run_shell_command: allows every command' "$WORK/rca.txt"
 has    "remote commands: a VS Code regex for every command" "! VS Code Copilot ~/$DAS/Code/User/settings\.json /\.\*/: allows every command" "$WORK/rca.txt"

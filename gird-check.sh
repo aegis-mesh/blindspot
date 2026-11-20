@@ -3367,7 +3367,9 @@ while IFS= read -r f; do
         */settings.local.json) RC_PROJ="$RC_PROJ$(printf '%s
 ' "$_rh" | awk -F "$TAB" -v OFS="$TAB" '{ print $1, "Claude Code", $2 ": " $3 }')$NL" ;;
         *) _tr=". Claude Code applies a project's allow rules once you trust the folder"
-           _w="${_w:+$_w, }run commands on other machines without asking, with permissions.allow: $(printf '%s
+           # A rule that allows every command (PowerShell alone) is said as that, as Bash alone is above.
+           _rv="run commands on other machines"; case "$_rh" in *"${TAB}allows every command,"*) _rv="run every command" ;; esac
+           _w="${_w:+$_w, }$_rv without asking, with permissions.allow: $(printf '%s
 ' "$_rh" | cut -f2 | paste -sd ',' - | sed 's/,/, /g')" ;;
       esac
     fi ;;
@@ -10668,7 +10670,7 @@ done
 N_RULE_UNREAD=$(count_lines "$({ printf '%s\n%s\n' "$AA_TRIED" "$RC_TRIED" | unread_files big; printf '%s\n' "$RC_CUTS"; } | awk 'length && !s[$0]++')")
 if [ "$N_OLD" -gt 0 ]; then G1="${YEL}!${RST}"; D1="$N_AG found, $(plural "$N_OLD" "security fix" "security fixes") to install"
 elif [ "$N_YOLO" -gt 0 ]; then G1="${YEL}!${RST}"; D1="$N_AG found, $N_YOLO_AG set to run commands without asking"
-elif [ "$N_REMOTE" -gt 0 ]; then G1="${YEL}!${RST}"; D1="$N_AG found, rules let $(plural "$N_REMOTE_AG" agent agents) run commands on other machines"
+elif [ "$N_REMOTE" -gt 0 ]; then G1="${YEL}!${RST}"; D1="$N_AG found, $N_REMOTE_AG can run commands on other machines"
 elif [ "$N_RULE_UNREAD" -gt 0 ]; then G1="${YEL}!${RST}"; D1="$N_AG found, but $(plural "$N_RULE_UNREAD" "settings file" "settings files") could not be read"
 elif [ "$N_AG" -eq 0 ]; then G1="${DIM}·${RST}"; D1="none found"
 elif [ "$N_IDLE" -gt 0 ]; then G1="${YEL}○${RST}"; D1="$N_AG found, $N_IDLE idle: $(first_names "$IDLE_NAMES" 2)"

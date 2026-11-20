@@ -2649,7 +2649,9 @@ foreach ($f in $AllowFiles) {
       if ($f.EndsWith('settings.local.json', [StringComparison]::Ordinal)) { foreach ($h in $rh) { $RcProj.Add(@($f, 'Claude Code', "$($h[1]): $($h[2])")) } }
       else {
         $tr = '. Claude Code applies a project''s allow rules once you trust the folder'
-        $w.Add("run commands on other machines without asking, with permissions.allow: $(@($rh | ForEach-Object { $_[1] }) -join ', ')")
+        # A rule that allows every command (PowerShell alone) is said as that, as Bash alone is above.
+        $rv = 'run commands on other machines'; if (@($rh | ForEach-Object { $_[2] }) -cmatch '^allows every command,') { $rv = 'run every command' }
+        $w.Add("$rv without asking, with permissions.allow: $(@($rh | ForEach-Object { $_[1] }) -join ', ')")
       }
     }
   }
@@ -9336,7 +9338,7 @@ foreach ($f in $rcCuts) { if ($f -and -not $ruleUnread.Contains($f)) { $ruleUnre
 $N_RULE_UNREAD = $ruleUnread.Count
 if ($N_OLD -gt 0) { $G1 = "$cYel!$cRst"; $D1 = "$N_AG found, $(Plural $N_OLD 'security fix' 'security fixes') to install" }
 elseif ($N_YOLO -gt 0) { $G1 = "$cYel!$cRst"; $D1 = "$N_AG found, $N_YOLO_AG set to run commands without asking" }
-elseif ($N_REMOTE -gt 0) { $G1 = "$cYel!$cRst"; $D1 = "$N_AG found, rules let $(Plural $N_REMOTE_AG 'agent' 'agents') run commands on other machines" }
+elseif ($N_REMOTE -gt 0) { $G1 = "$cYel!$cRst"; $D1 = "$N_AG found, $N_REMOTE_AG can run commands on other machines" }
 elseif ($N_RULE_UNREAD -gt 0) { $G1 = "$cYel!$cRst"; $D1 = "$N_AG found, but $(Plural $N_RULE_UNREAD 'settings file' 'settings files') could not be read" }
 elseif ($N_AG -eq 0) { $G1 = "$cDim$gMid$cRst"; $D1 = 'none found' }
 elseif ($N_IDLE -gt 0) { $G1 = "$cYel$gRing$cRst"; $D1 = "$N_AG found, $N_IDLE idle: $(First-Names $IdleNames 2)" }
