@@ -1342,11 +1342,19 @@ EOF
     for e in "$d"/* "$d"/.[!.]*; do [ -d "$e" ] && [ ! -L "$e" ] || continue
       if [ ! -x "$e" ]; then printf "find: %s: Permission denied\n" "$e" >&2
       elif [ -f "$e/pyvenv.cfg" ] && [ ! -L "$e/pyvenv.cfg" ]; then printf "%s\n" "$e/pyvenv.cfg"; fi; done; done'
+  # A project's .github folder 5 or 6 folders down, where the scan stops before its workflows: sh lists
+  # its workflows folder as the scan would (regular files ending in .yml or .yaml), so a repo as deep as
+  # ~/src/github.com/org/repo has its workflows read. A workflows folder it can't read is named in
+  # find's own words.
+  # shellcheck disable=SC2016  # $d, $w and $f are for the sh that find starts
+  _ghw='for d; do w=$d/workflows; [ -d "$w" ] && [ ! -L "$w" ] || continue
+    if [ ! -r "$w" ] || [ ! -x "$w" ]; then printf "find: %s: Permission denied\n" "$w" >&2; continue; fi
+    for f in "$w"/* "$w"/.[!.]* "$w"/..?*; do case "$f" in *.yml|*.yaml) [ -f "$f" ] && [ ! -L "$f" ] && printf "%s\n" "$f" ;; esac; done; done'
   if find /dev/null -maxdepth 0 -ilname x >/dev/null 2>&1; then
     _lk=(-ilname '*authorized_keys' -exec printf 'L %s\n' {} +); _ls=(-exec printf 'S %s\n' {} +); _lx=(-exec sh -c "$_ld" sh {} +)
     [ -e "$H/.ssh/authorized_keys" ] && _lk=(\( -ilname '*authorized_keys' -o ! -lname '/*' -o -lname "$H/*" \) -exec printf 'L %s\n' {} +)
-    _tx=(-exec sh -c "$_tz" sh {} +)
-  else _lk=(-exec printf 'L %s\n' {} \;); _ls=(-exec printf 'S %s\n' {} \;); _lx=(-exec sh -c "$_ld" sh {} \;); _tx=(-exec sh -c "$_tz" sh {} \;); fi
+    _tx=(-exec sh -c "$_tz" sh {} +); _gx=(-exec sh -c "$_ghw" sh {} +)
+  else _lk=(-exec printf 'L %s\n' {} \;); _ls=(-exec printf 'S %s\n' {} \;); _lx=(-exec sh -c "$_ld" sh {} \;); _tx=(-exec sh -c "$_tz" sh {} \;); _gx=(-exec sh -c "$_ghw" sh {} \;); fi
   set -- -name node_modules -o -name .git -o -name .Trash -o -name .cache -o -name .npm \
     -o -name .pnpm-store -o -name .yarn -o -name .cargo -o -name .rustup -o -name .gradle \
     -o -name .m2 -o -name .pyenv -o -name .rbenv -o -name .nvm -o -name .bun -o -name .deno \
@@ -1372,6 +1380,7 @@ EOF
   BS_PC=$_pc BS_PV=$_pv find -H "$H" -maxdepth 6 \( -type d -name "*$_nl*" -prune -exec sh -c 'printf "N %s\n" "$(printf "%s" "$1" | tr "\n" "?")"' sh {} \; \) -o \
     \( -type d -name .tox -prune "${_tx[@]}" \) -o \
     \( -type d \( "$@" \) -prune \) -o \
+    \( -type d -name .github -path "$H/*/*/*/*/.github" "${_gx[@]}" \) -o \
     \( -type d -name site-packages -print -prune \) -o \
     \( -type f \( -name .env -o -name '.env.*' -o -name .envrc -o -name .mcp.json -o -name pyvenv.cfg \
        -o -path '*/.claude/settings.local.json' -o -path '*/.claude/settings.json' \
@@ -2298,22 +2307,24 @@ WORM_CMD_WEAK=""; [ -n "$WORM_RUN_WEAK" ] && WORM_CMD_WEAK=$(worm_cmd "$WORM_RUN
 # folders agents and editors keep their files in. Projects do this too (a hook that sets up a tool's
 # path), so it is named for the person to check, never counted as malware. A command runs one as
 # worm_cmd reads it, with sh, bash, zsh and python too (never the code of -c, -e or -p), or as the
-# command itself. START_PATH is the script; START_CMD a command that runs one.
+# command itself, and after the words that run the rest of a command: nohup, exec, env (as
+# /usr/bin/env too), npx and VAR=value. START_PATH is the script; START_CMD a command that runs one.
 START_PATH='\.(claude|vscode|github|codex|cursor)([/\\]+[A-Za-z0-9._@+-]+)+'
-start_cmd() {
-  _wf='(\\"|'"'"')?((\\")?\$\{?(CLAUDE_PROJECT_DIR|workspaceFolder)\}?(\\")?[/\\]+|\.[/\\]+)?'"$START_PATH"'(\\"|["'"'"'[:space:];&|)])'
+start_cmd() { # script-ERE prefix-ERE: four expressions, one per line
+  _wf='(\\"|'"'"')?'"$2$1"'(\\"|["'"'"'[:space:];&|)])'
   _wp='(([^[:space:]"\\]|\\\\)*(/|\\\\))?'
+  _wx='((nohup|exec|npx|'"$_wp"'env)[[:space:]]+|[A-Za-z_][A-Za-z0-9_]*=([^[:space:]"'"'"'\\;&|]|\\\\)*[[:space:]]+)*'
   _wo='(--|--[A-BDF-OQ-Za-bdf-oq-z0-9][^[:space:]"\\]*|-[A-BDF-OQ-Za-bdf-oq-z0-9]+)[[:space:]]+'
   _wq='[^"\\'"'"']|\\[^"]|'"'"'([^'"'"'"\\]|\\.)*'"'"'|\\"([^"\\]|\\[^"])*\\"'
   _ws='"command"[[:space:]]*:[[:space:]]*"[[:space:]]*(('"$_wq"')*(;|&&?|\|\|?)[[:space:]]*)?'
   _wn='(node|tsx|bun|deno|sh|bash|zsh|python[0-9.]*|py)(\.exe)?'
   _wi='"command"[[:space:]]*:[[:space:]]*"'"$_wp$_wn"'"'
-  _wa='"args"[[:space:]]*:[[:space:]]*\[([[:space:]]*"([^"\\]|\\.)*"[[:space:]]*,)*[[:space:]]*"(\$\{?(workspaceFolder|CLAUDE_PROJECT_DIR)\}?[/\\]+|\.[/\\]+)?'"$START_PATH"'"'
+  _wa='"args"[[:space:]]*:[[:space:]]*\[([[:space:]]*"([^"\\]|\\.)*"[[:space:]]*,)*[[:space:]]*"(\$\{?(workspaceFolder|CLAUDE_PROJECT_DIR)\}?[/\\]+|\.[/\\]+)?'"$1"'"'
   _wb='([^{}]|\{[^{}]*\})*'
-  printf '%s\n%s\n%s\n%s' "$_ws$_wp${_wn}[[:space:]]+($_wo)*(run[[:space:]]+($_wo)*)?$_wf" "$_ws$_wf" "$_wi$_wb$_wa" "$_wa$_wb$_wi"
+  printf '%s\n%s\n%s\n%s' "$_ws$_wx$_wp${_wn}[[:space:]]+($_wo)*(run[[:space:]]+($_wo)*)?$_wf" "$_ws$_wx$_wf" "$_wi$_wb$_wa" "$_wa$_wb$_wi"
 }
 # One expression per line, each given to grep alone: macOS's grep can crash on all four joined by |.
-START_CMD=$(start_cmd)
+START_CMD=$(start_cmd "$START_PATH" '((\\")?\$\{?(CLAUDE_PROJECT_DIR|workspaceFolder)\}?(\\")?[/\\]+|\.[/\\]+)?')
 # The elements of every array that is the value of the key K, one line each, from flat's one-line
 # text: a session-start hook's entries, or each task of a tasks.json. Strings are copied whole and
 # brackets counted outside them only, each piece split once, so the time grows with the file's size.
@@ -2371,32 +2382,48 @@ cmd_parts() {
       }
       if (on) printf "\"\n"
     }'
+  set -- "${PIPESTATUS[@]}"; [ "$1" -le 1 ] && [ "$2" -eq 0 ]
 }
 # With an element-ERE, a task one of those elements lists in dependsOn by label counts too: one level, so a
 # task the dependency itself depends on does not.
 start_scripts() { # flattened-text key [element-ERE]: the scripts those elements run, one per line
-  _all=$(printf '%s' "$1" | json_elems "$2")
-  _el=$(printf '%s\n' "$_all" | { if [ -n "${3:-}" ]; then grep -E "$3"; else cat; fi; })
+  # grep exits 0 on a match, 1 on none, and above 1 when it failed or crashed; awk exits 0 unless it
+  # failed. On a failure nothing is printed and the caller names the file as not read, never as one
+  # that runs no script.
+  _all=$(printf '%s' "$1" | json_elems "$2") || return 2
+  if [ -n "${3:-}" ]; then _el=$(printf '%s\n' "$_all" | grep -E "$3"); [ $? -le 1 ] || return 2; else _el=$_all; fi
   if [ -n "${3:-}" ] && [ -n "$_el" ]; then
-    _dl=$(printf '%s\n' "$_el" | grep -oE '"dependsOn"[[:space:]]*:[[:space:]]*(\[[^]]*\]|"([^"\\]|\\.)*")' | sed -E 's/^"dependsOn"[[:space:]]*:[[:space:]]*//' | grep -oE '"([^"\\]|\\.)*"' | sed -E 's/^"//; s/"$//')
+    _dl=$(printf '%s\n' "$_el" | grep -oE '"dependsOn"[[:space:]]*:[[:space:]]*(\[[^]]*\]|"([^"\\]|\\.)*")'); [ $? -le 1 ] || return 2
+    if [ -n "$_dl" ]; then
+      _dl=$(printf '%s\n' "$_dl" | sed -E 's/^"dependsOn"[[:space:]]*:[[:space:]]*//' | grep -oE '"([^"\\]|\\.)*"'); [ $? -le 1 ] || return 2
+      _dl=$(printf '%s\n' "$_dl" | sed -E 's/^"//; s/"$//')
+    fi
     if [ -n "$_dl" ]; then
       _dep=$(printf '%s\n' "$_all" | DEPS="$_dl" awk '
         BEGIN { n = split(ENVIRON["DEPS"], a, "\n"); for (i = 1; i <= n; i++) if (a[i] != "") w[a[i]] = 1 }
-        match($0, /"label"[ \t]*:[ \t]*"([^"\\]|\\.)*"/) { s = substr($0, RSTART, RLENGTH); sub(/^"label"[ \t]*:[ \t]*"/, "", s); sub(/"$/, "", s); if (s in w) print }')
+        match($0, /"label"[ \t]*:[ \t]*"([^"\\]|\\.)*"/) { s = substr($0, RSTART, RLENGTH); sub(/^"label"[ \t]*:[ \t]*"/, "", s); sub(/"$/, "", s); if (s in w) print }') || return 2
       [ -n "$_dep" ] && _el=$(printf '%s\n%s\n' "$_el" "$_dep")
     fi
   fi
   [ -n "$_el" ] || return 0
-  _in=$(printf '%s\n' "$_el"; printf '%s\n' "$_el" | cmd_parts); _mt=""
-  # grep exits 0 on a match, 1 on none, and above 1 when it failed or crashed: then nothing is printed
-  # and the caller names the file as not read, never as one that runs no script.
+  cmd_scripts "$_el" "$START_CMD" "$START_PATH"
+}
+# The scripts the commands in these elements run, one per line: each command whole and each part of it
+# (cmd_parts) is matched by each of the expressions (one per line), and the script is the last path
+# in the match. Returns 2, printing nothing, when grep or awk fails.
+cmd_scripts() { # elements expressions script-ERE
+  _in=$(printf '%s\n' "$1"; printf '%s\n' "$1" | cmd_parts) || return 2; _mt=""
   while IFS= read -r _rx; do
     _o=$(printf '%s\n' "$_in" | grep -oE "$_rx"); [ $? -le 1 ] || return 2
     _mt="$_mt$_o$NL"
   done <<EOF
-$START_CMD
+$2
 EOF
-  printf '%s' "$_mt" | while IFS= read -r _m; do [ -n "$_m" ] && printf '%s\n' "$_m" | grep -oE "$START_PATH" | tail -n 1; done | sed -E 's#[/\\]+#/#g' | sort -u
+  # One grep numbers every path by its line, and awk keeps each line's last, so the time grows with
+  # the text, not with the number of commands.
+  _mt=$(printf '%s' "$_mt" | grep -noE "$3"); [ $? -le 1 ] || return 2
+  _mt=$(printf '%s\n' "$_mt" | awk '{ i = index($0, ":"); if (i) l[substr($0, 1, i - 1)] = substr($0, i + 1) } END { for (k in l) print l[k] }') || return 2
+  [ -z "$_mt" ] || printf '%s\n' "$_mt" | sed -E 's#[/\\]+#/#g' | sort -u
 }
 in_words() { # lines: them as "a", "a and b" or "a, b and c"
   printf '%s\n' "$1" | awk 'NF { a[++n] = $0 } END { for (i = 1; i <= n; i++) printf "%s%s", (i == 1 ? "" : (i == n ? " and " : ", ")), a[i] }'
@@ -2482,12 +2509,14 @@ flat() {
 }
 auto_row() { # file what flattened-text [script-note]
   # A worm file counts only when a command runs it (worm_cmd), and a file projects use too only in a
-  # project that counts (WORM_PROJ).
-  if { [ -n "$WORM_CMD_ALONE" ] && printf '%s' "$3" | grep -qE "$WORM_CMD_ALONE"; } ||
-     { [ -n "$WORM_CMD_WEAK" ] && worm_proj "$1" && printf '%s' "$3" | grep -qE "$WORM_CMD_WEAK"; }; then
-    WORM_REFS="$WORM_REFS$1
+  # project that counts (WORM_PROJ). A grep that fails (above 1) leaves the file named as not read,
+  # never as one that runs no worm file.
+  _wr=1
+  if [ -n "$WORM_CMD_ALONE" ]; then printf '%s' "$3" | grep -qE "$WORM_CMD_ALONE"; _wr=$?; fi
+  if [ "$_wr" -eq 1 ] && [ -n "$WORM_CMD_WEAK" ] && worm_proj "$1"; then printf '%s' "$3" | grep -qE "$WORM_CMD_WEAK"; _wr=$?; fi
+  if [ "$_wr" -eq 0 ]; then WORM_REFS="$WORM_REFS$1
 "
-  fi
+  elif [ "$_wr" -gt 1 ]; then cut_file "$1"; fi
   # With nothing to list (hooks turned off), only a hook that runs a worm file counts: the worm wrote it.
   [ -n "$2" ] || return 0
   # Worktrees and copies carry the same settings: one row, with how many more folders have it. The
@@ -3259,7 +3288,10 @@ while IFS= read -r f; do
   done
   if [ "$_dah" = true ]; then _rx="\"($CMD_ALWAYS)\"[[:space:]]*:"; else _rx="$HOOK_RUN|\"($CMD_KEYS)\"[[:space:]]*:"; fi
   _note=""
-  if printf '%s' "$_t" | grep -qE "$_rx"; then
+  # grep exits above 1 when it fails: the file is then named as not read, never as one that runs nothing.
+  printf '%s' "$_t" | grep -qE "$_rx"; _hr=$?
+  [ "$_hr" -gt 1 ] && cut_file "$f"
+  if [ "$_hr" -eq 0 ]; then
     _w="run commands while the agent works"
     if [ "$_dah" != true ]; then
       _ss=$(start_scripts "$_t" SessionStart) || cut_file "$f"
@@ -3331,7 +3363,9 @@ while IFS= read -r f; do
   case "$f" in */.claude/plugins/*) continue ;; esac
   _t=$(flat "$f"); _w=""
   _note=""
-  if printf '%s' "$_t" | grep -qE "$FOLDER_OPEN"; then
+  printf '%s' "$_t" | grep -qE "$FOLDER_OPEN"; _hr=$?
+  [ "$_hr" -gt 1 ] && cut_file "$f"
+  if [ "$_hr" -eq 0 ]; then
     _w="run a task when the folder opens in VS Code or Cursor"
     _ss=$(start_scripts "$_t" tasks "$FOLDER_OPEN") || cut_file "$f"
     if [ -n "$_ss" ]; then
@@ -3393,14 +3427,15 @@ N_AUTO_PROJ=$(printf '%s' "$AUTO_ROWS" | cut -f1 | sed -E 's#/\.(claude|vscode)/
 # folder-open task in one project that both run a planted file (data/planted.tsv: its folder and name)
 # of one name, so it runs whether the folder opens in an agent or in an editor. Still a script to read, never a
 # compromised machine: the file itself counts only by its published SHA-256 or beside a worm's own file.
-# A worktree is left out when its repo is listed.
+# A worktree is left out when its repo is listed. The list is in byte order of the path, as
+# gird-check.ps1 sorts it.
 WIRED=$(printf '%s\n' "$PLANTED" "-" "$START_TASKS" "-" "$START_HOOKS" | awk -F "$TAB" '
   function base(s) { sub(/.*\//, "", s); return s }
   $0 == "-" { part++; next }
   part == 0 { if (NF) P[$0] = 1; next }
   part == 1 { if (NF == 2 && ($2 in P)) T[$1 FS base($2)] = 1; next }
   NF == 2 && ($2 in P) && (($1 FS base($2)) in T) && !seen[$1 FS base($2)]++ { r[++n] = $1 FS base($2); p[$1] = 1 }
-  END { for (i = 1; i <= n; i++) { split(r[i], x, FS); w = x[1]; sub(/\/\.claude\/worktrees\/.*/, "", w); if (w != x[1] && (w in p)) continue; print r[i] } }')
+  END { for (i = 1; i <= n; i++) { split(r[i], x, FS); w = x[1]; sub(/\/\.claude\/worktrees\/.*/, "", w); if (w != x[1] && (w in p)) continue; print r[i] } }' | LC_ALL=C sort)
 N_WIRED=$(printf '%s' "$WIRED" | cut -f1 | sort -u | grep -c .)
 # The AntV wave also copies its payload to ~/.claude/package and ~/.codex/package and adds a
 # SessionStart hook that runs it to the Claude Code and Codex settings files it finds (SafeDep). The
@@ -3408,20 +3443,23 @@ N_WIRED=$(printf '%s' "$WIRED" | cut -f1 | sort -u | grep -c .)
 # reads hooks from hooks.json and from config.toml's [hooks] tables (its hooks docs); a settings.json
 # there is read too, as the worm writes such files. In config.toml only the SessionStart tables count,
 # with # comments outside strings removed: a [[hooks.SessionStart]] table, or a SessionStart array
-# under [hooks] (or hooks.SessionStart at the top), to the bracket that closes it.
+# under [hooks] (or hooks.SessionStart at the top), to the bracket that closes it, or in an inline
+# table at the top (hooks = { SessionStart = [ ... ] }), that array alone.
 toml_session_start() { # file: the lines of its SessionStart hook tables, comments removed
   # The first awk prints each line, then a tab, its count of [ less ] outside strings, a tab, and 1 when
   # the line starts inside a multi-line string (""" or '''), which goes on over lines, # and brackets too.
+  # Quotes are compared character by character (c[]), never with substr, which measures the whole line
+  # on macOS's awk: a long line is read in time that grows with its length.
   { awk '
     { n = split($0, c, ""); q = ""; b = 0; m = (ml != "")
       for (i = 1; i <= n; i++) {
         ch = c[i]
         if (ml != "") {
           if (ml == "\"\"\"" && ch == "\\" && i < n) { printf "%s%s", ch, c[i + 1]; i++; continue }
-          if (substr($0, i, 3) == ml) { k = i + 3; while (k <= n && k < i + 5 && c[k] == ch) k++; printf "%s", substr($0, i, k - i); i = k - 1; ml = ""; continue }
+          if (ch == mq && c[i + 1] == ch && c[i + 2] == ch) { k = i + 3; while (k <= n && k < i + 5 && c[k] == ch) k++; for (j = i; j < k; j++) printf "%s", c[j]; i = k - 1; ml = ""; continue }
         } else if (q == "") {
           if (ch == "#") break
-          if ((ch == "\"" || ch == "'"'"'") && substr($0, i, 3) == ch ch ch) { ml = ch ch ch; printf "%s", ml; i += 2; continue }
+          if ((ch == "\"" || ch == "'"'"'") && c[i + 1] == ch && c[i + 2] == ch) { ml = ch ch ch; mq = ch; printf "%s", ml; i += 2; continue }
           if (ch == "\"" || ch == "'"'"'") q = ch
           else if (ch == "[") b++
           else if (ch == "]") b--
@@ -3431,14 +3469,60 @@ toml_session_start() { # file: the lines of its SessionStart hook tables, commen
         printf "%s", ch
       }
       printf "\t%d\t%d\n", b, m }' < "$1"; } 2>/dev/null | awk '
+    # The inline table hooks = { ... }, read a character at a time over as many lines as it takes, its
+    # strings skipped: ib and ia are its { and [ depths, iq the quote of the string it is in, ik the key
+    # being read at the level of the table itself (its characters but spaces and tabs, the first 64),
+    # and the array whose key is SessionStart is printed, a line for each line it is on.
+    function inl(t,   n, c, i, ch) {
+      n = split(t, c, "")
+      for (i = 1; i <= n; i++) {
+        ch = c[i]
+        if (io) printf "%s", ch
+        if (iq != "") {
+          if (ch == "\\" && iq == "\"" && i < n) { i++; if (io) printf "%s", c[i]; ch = ch c[i] }
+          else if (ch == iq) iq = ""
+        } else if (ch == "\"" || ch == "'"'"'") iq = ch
+        else if (ch == "{" || ch == "}" || ch == "[" || ch == "]" || ch == ",") {
+          if (ch == "[" && !io && ib == 1 && ia == 0 && ik ~ /^["'"'"']?SessionStart["'"'"']?=$/) { io = 1; printf "%s", ch }
+          if (ch == "{") ib++
+          else if (ch == "}") { ib--; if (ib <= 0) { if (io) printf "\n"; io = 0; il = 0; return } }
+          else if (ch == "[") ia++
+          else if (ch == "]") { ia--; if (ia <= 0 && io) { io = 0; printf "\n" } }
+          ik = ""; continue
+        }
+        if (ib == 1 && ia == 0 && ch != " " && ch != "\t" && ch != "\r" && length(ik) < 64) ik = ik ch
+      }
+      if (io) printf "\n"
+    }
     BEGIN { top = 1 }
     { match($0, /\t-?[0-9]+\t[01]$/); l = substr($0, 1, RSTART - 1); split(substr($0, RSTART + 1), x, "\t"); b = x[1] + 0 }
+    il { inl(l); next }
     d > 0 { print l; d += b; next }
     x[2] == 1 { if (s) print l; next }
     l ~ /^[[:space:]]*\[/ { t = l; gsub(/[[:space:]"'"'"']/, "", t); s = (t ~ /^\[\[?hooks\.SessionStart([].]|$)/); h = (t == "[hooks]"); top = 0; next }
     s { print l; next }
-    (h && l ~ /^[[:space:]]*["'"'"']?SessionStart["'"'"']?[[:space:]]*=/) || (top && l ~ /^[[:space:]]*hooks\.SessionStart[[:space:]]*=/) { print l; d = b }'
+    (h && l ~ /^[[:space:]]*["'"'"']?SessionStart["'"'"']?[[:space:]]*=/) || (top && l ~ /^[[:space:]]*hooks\.SessionStart[[:space:]]*=/) { print l; d = b; next }
+    top && l ~ /^[[:space:]]*["'"'"']?hooks["'"'"']?[[:space:]]*=[[:space:]]*\{/ { ib = 0; ia = 0; iq = ""; ik = ""; io = 0; il = 1; inl(l) }'
+  set -- "${PIPESTATUS[@]}"; [ "$1" -eq 0 ] && [ "$2" -eq 0 ]
 }
+# Each command = "..." in these TOML lines, written as JSON writes it ("command": "..."), for
+# cmd_scripts: a literal string ('...' or '''...''') with its \ and " escaped, a basic one ("..." or
+# """...""") as it is. sed escapes them, in time that grows with the length of the string.
+toml_cmds() {
+  grep -oE '(^|[^A-Za-z0-9_=-])["'"'"']?command["'"'"']?[[:space:]]*=[[:space:]]*("""(("|"")?([^"\\]|\\.))*("|"")?"""|'"'''(('|'')?[^'])*('|'')?'''"'|"([^"\\]|\\.)*"|'"'[^']*'"')' |
+    awk '{ v = substr($0, index($0, "=") + 1); sub(/^[[:space:]]+/, "", v); t = substr(v, 1, 3)
+      if (t == "'"'''"'") print "L" substr(v, 4, length(v) - 6)
+      else if (substr(t, 1, 1) == "'"'"'") print "L" substr(v, 2, length(v) - 2)
+      else if (t == "\"\"\"") print "B" substr(v, 4, length(v) - 6)
+      else print "B" substr(v, 2, length(v) - 2) }' |
+    sed -e '/^L/{' -e 's/\\/\\\\/g' -e 's/"/\\"/g' -e '}' -e 's/^./"command": "/' -e 's/$/"/'
+  set -- "${PIPESTATUS[@]}"; [ "$1" -le 1 ] && [ "$2" -eq 0 ] && [ "$3" -eq 0 ]
+}
+# A hook runs a file from there when that file is the script an interpreter runs, or the command itself,
+# as start_cmd reads a command, with any folder before .claude or .codex: a guard that only tests for
+# the file, or a command that deletes it, does not.
+UH_PATH='\.(claude|codex)[/\\]+package([/\\]+[A-Za-z0-9._@+-]+)*[/\\]*'
+UH_CMD=$(start_cmd "$UH_PATH" '(([^[:space:]"'"'"'\\;&|]|\\\\)*(/|\\\\))?')
 USER_HOOKS=""
 _cxd=${CODEX_HOME:-$H/.codex}; _cxd=${_cxd%/}; _ccd=${CLAUDE_CONFIG_DIR:-$H/.claude}; _ccd=${_ccd%/}
 UHOOK_FILES="$_ccd/settings.json
@@ -3449,11 +3533,14 @@ for _uf in "$_ccd/settings.json" "$H/.claude/settings.json" "$_cxd/hooks.json" "
   [ -f "$_uf" ] && ! too_big "$_uf" || continue
   case "$USER_HOOKS" in "$(rowsafe "$_uf")$TAB"*|*"
 $(rowsafe "$_uf")$TAB"*) continue ;; esac
+  # An awk or grep that fails names the file as not read, never as one with no such hook (a file that
+  # can't be opened is named already).
   case "$_uf" in
-    *.toml) _ut=$(toml_session_start "$_uf") ;;
+    *.toml) _ut=$(toml_session_start "$_uf") && _ut=$(printf '%s\n' "$_ut" | toml_cmds) ;;
     *) _ut=$(flat "$_uf" | json_elems SessionStart) ;;
-  esac
-  _us=$(printf '%s\n' "$_ut" | grep -oE '\.(claude|codex)[/\\]+package[/\\]' | head -n 1 | sed -E 's#^\.(claude|codex).*#.\1/package#')
+  esac || { [ -r "$_uf" ] && cut_file "$_uf"; continue; }
+  _us=$(cmd_scripts "$_ut" "$UH_CMD" "$UH_PATH") || { cut_file "$_uf"; continue; }
+  _us=$(printf '%s\n' "$_us" | sed -n -E 's#^\.(claude|codex)/package.*#.\1/package#p' | head -n 1)
   [ -n "$_us" ] && USER_HOOKS="$USER_HOOKS$(rowsafe "$_uf")$TAB$_us
 "
 done
@@ -8755,21 +8842,49 @@ checkmarx/kics-github-action|Checkmarx/kics-github-action|v1 v1.0 v1.1 v1.2 v1.3
 actions-cool/issues-helper|actions-cool/issues-helper|v3.8.0 v3.7.6 v3.7.5 v3.7.4 v3.7.3 v3.7.2 v3.7.1 v3.7.0 v3.6.3 v3.6.2 v3.6.1 v3.6.0 v3.5.2 v3.5.1 v3.5.0 v3.4.0 v3.3.3 v3.3.2 v3.3.1 v3.3.0 v3.2.1 v3.2.0 v3.1.0 v3.0.1 v3.0.0 v3 v2.5.0 v2.4.3 v2.4.2 v2.4.1 v2.4.0 v2.3.1 v2.3.0 v2.2.1 v2.2.0 v2.1.2 v2.1.1 v2.1.0 v2.0.0 v2 v1.12 v1.11 v1.10 v1.9 v1.8 v1.7 v1.6 v1.5 v1.4 v1.3 v1.2 v1.1 v1|1c9e803c80cc7fed000022d4c94f4b5bc2e90062,f0448c62fc57b8a5ce23d8acd6e795cdd76a3b6c,abc4310e6b8520aff6af79a4880217917cd1436b,aea87833045e38098e64310e962b897ae8aaba33,aeb05195dbd618afce6f22ca4937e46940d86be1,4b10341e231301a86c66f6c09e3e4de76d8719fe,8a3a7c2960ff3a4e3fd1481cfd1eb31301e16337,aa44b5492c787fbc4c51edb8d98d88b668fe89d1,03bbf452b52fb318196d9c193fd178a79a6d7f9b,257849272e291fb74ff4bee4d3be4796dd35fbbb,4bb72d31eaee87562b70a0cf1b93579bb2b14c23,e0585c10366288eeec3117d65ed24240ccbf1f47,419b34c603623ea8749a98b7153df20e389dd0ec,8cc2629c5681d794c494b79283d23aa3ce78749c,4b69521f9829a1114b94d74fdc1a38f2291d8c34,dc5687b71897e8b57bc9743e325ac72cee763c9c,3846bd4230da36f68a4cc1527298ca9ab2652fb9,459b0cfc4dd708b6218b72a7a01dda6c6a7ab0c0,fa6a4ca487f2dc699d428126ea2b18e9d0d15c9d,15c89f718cd325833aad8000d3ec72e2660f6584,a7d3c46a35564fa85321f3557700f6ea0c0616a9,85c9d842e1c0f41f8805f17600c25237e08a0224,64ed6d61b6eee8744417e1d1cc651665a8bce236,d9b1764cbe78ec9b12f01a66b2d2c902b15981b6,b9c83f01929e190cda300e76f688bf7ea7e37a7a,147337a919d92f4bf42f02843682d694650f1e22,e9631d2e615d95a19111c272049444fb073a99be,91b26b99c50ad890f98c2184d251bd3a16f5b1b1,3f4d6804812734dfe945bbe8ef619f151e4b27f6,46eff1378ad0faee27c017ebd97f605548777098,071e169dfb36005b3262b3853c9894698b8b303b,55253d49c68133ae52e791a3f1f8242b191f5e91,edf8cf78d6feeb5a73cda9317af5ddfc4da6c5fd,a0c53dd42fc842d2f9276c5a1d4f9a26abe8713d,896379edfaac994ff214a3097c6c82e21be16066,9bd6ce03e0c279f347b519548b87d26699ad31c9,d2877f69bae9d8dcbadb06b3214ebf0789ed566e,601e1296a5a0853b5e109f9820151c72619e11e4,75fb02043af24e6f3eaf534464de338173993629,3480e51eec2be03a70d6fe17507413a96fe5b57d,67716d94ad07d7fe793cabc6f6d1ffe24f77bdf7,cd96d6518c6338f8510638bce764c7abd7194983,6a538e928b8856062de61103ed5a08f0ea0faee9,9793761b1bc3dde7ad1ccb9be6211919e20a3f01,8a64710bb8fee9f5c92eb1a816e016ed00fbcce0,710ff89debb143f6859cf8d54c0e8739224ff6c1,3904fe935f1a18fee5dbad6db46a66c9dcffde01,cfbd14ccc97afd3baa822bd231df8460e4f02f29,15dc537110a44b0625622e82b7d6ca95583f276a,e778a401e233bf0a416f3fe2a52d9039949b30a6,203671479d663755cb5bf8ffbeca6d2b685af7ae,a7156495f3403674cafe3796382bded1d9af8931,5c267592a87e92c2b005b338bd0d2724c2f64acb|-|safe|from 18 May 2026|stepsecurity.io|Remove it. Every tag was moved to a malicious commit, and in September 2026 the tags still ran it.
 actions-cool/maintain-one-comment|actions-cool/maintain-one-comment|v3.3.0 v3.2.1 v3.2.0 v3.1.1 v3.1.0 v3 v2.0.2 v2.0.1 v2.0.0 v2 v1.2.1 v1.2.0 v1.1.0 v1.0.0 v0.0.1-wip|7f6120bb10c870b9fde146961a18e5bf0b3d4401,4a6ac28684e2b0c48d502b31363ec5dd72f9d7ff,f3593fb4454aff5a6e1fb67024f94bfa48591dd5,5d844d6b1c6a0c09a96844521bb01f149d9fe2c1,2ab0aa3449ffe526ea64489193955d82a6848669,c43d668894bebbeea688878ab6774fa405f22251,93ec180e89e8fdd8525869daa5590c433b6c30fb,cbb2ba52a811cb6152eee0607519cc5df78289b5,99b7f41bf9e14a2a2c7cc524731336543f552178,ef01721dfd04f9c7ff1a256292f7dceabfd08d9b,d6622cc2415156cf4e81cf57866420479a966b3a,74b8a9a600daf6fc6070ca0a10d840a7bb6890ae,cae76b34894429e693e9b0d2731e7654c373ce81,7bb44528a0869f4074cc5448601804878704963f,8bb68050bc2a353f9d3032e2b42732a69d97499b|-|safe|from 18 May 2026|stepsecurity.io|Remove it. Every tag was moved to a malicious commit."
 # <<< actions
+# A uses: is read in a block mapping (- uses: x@v1), with its value on the next line when that line is
+# indented more than the key (uses: on its own, or with | or >), and in a flow mapping ({uses: x@v1}),
+# after the { or a , on a line that has one, a # comment cut off first. Each line is split on its { and
+# its , once, so the time grows with the size of the file.
 act_uses() { # workflow: "owner/repo<TAB>ref" for each uses: line, owner/repo in lowercase
-  awk '{ sub(/\r$/, "") }
-    match($0, /^[ \t]*(-[ \t]+)?["\047]?uses["\047]?[ \t]*:[ \t]*/) {
-      v = substr($0, RSTART + RLENGTH); q = substr(v, 1, 1)
-      if (q == "\"" || q == "\047") { v = substr(v, 2); i = index(v, q); if (i == 0) next; v = substr(v, 1, i - 1) }
+  awk '
+    function use(v,   q, i, at, a, r, p) {
+      q = substr(v, 1, 1)
+      if (q == "\"" || q == "\047") { v = substr(v, 2); i = index(v, q); if (i == 0) return; v = substr(v, 1, i - 1) }
       else { sub(/[ \t]+#.*$/, "", v); sub(/[ \t]+$/, "", v) }
-      at = index(v, "@"); if (at == 0) next
+      at = index(v, "@"); if (at == 0) return
       a = substr(v, 1, at - 1); r = substr(v, at + 1)
-      if (a !~ /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+(\/.*)?$/ || r == "" || r ~ /[ \t]/) next
-      n = split(a, p, "/"); print tolower(p[1] "/" p[2]) "\t" r }' "$1" 2>/dev/null
+      if (a !~ /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+(\/.*)?$/ || r == "" || r ~ /[ \t]/) return
+      split(a, p, "/"); print tolower(p[1] "/" p[2]) "\t" r
+    }
+    { sub(/\r$/, "") }
+    nx > 0 {
+      if ($0 ~ /^[ \t]*(#|$)/) next
+      w = nx; nx = 0; match($0, /^[ \t]*/)
+      if (RLENGTH >= w) { use(substr($0, RLENGTH + 1)); next }
+    }
+    match($0, /^[ \t]*(-[ \t]+)?["\047]?uses["\047]?[ \t]*:[ \t]*/) {
+      v = substr($0, RSTART + RLENGTH)
+      if (v ~ /^(#.*)?$/ || v ~ /^[|>][0-9+-]*[ \t]*(#.*)?$/) { match($0, /^[ \t]*(-[ \t]+)?/); nx = RLENGTH + 1; next }
+      use(v); next
+    }
+    index($0, "{") && $0 !~ /^[ \t]*#/ {
+      s = $0; h = index(s, " #"); if (h) s = substr(s, 1, h - 1); h = index(s, "\t#"); if (h) s = substr(s, 1, h - 1)
+      n = split(s, c, "{")
+      for (i = 2; i <= n; i++) {
+        m = split(c[i], d, ",")
+        for (j = 1; j <= m; j++) if (match(d[j], /^[ \t]*["\047]?uses["\047]?[ \t]*:[ \t]*/)) {
+          v = substr(d[j], RLENGTH + 1); k = index(v, "}"); if (k) v = substr(v, 1, k - 1); use(v)
+        }
+      }
+    }' "$1" 2>/dev/null
 }
 ACT_HITS=""; ACT_UNREAD=0; N_WF=0
 while IFS= read -r _wf; do
   [ -n "$_wf" ] || continue
   if [ ! -r "$_wf" ] || too_big "$_wf"; then ACT_UNREAD=$((ACT_UNREAD + 1)); continue; fi
+  # An awk that fails leaves the workflow not read, never one with no listed action.
+  _au=$(act_uses "$_wf") || { ACT_UNREAD=$((ACT_UNREAD + 1)); continue; }
   N_WF=$((N_WF + 1))
   while IFS="$TAB" read -r _ua _ur; do
     [ -n "$_ua" ] || continue
@@ -8802,7 +8917,7 @@ $_row
 $ACT_TABLE
 EOF
   done <<EOF
-$(act_uses "$_wf")
+$_au
 EOF
 done <<EOF
 $WORKFLOWS
@@ -9070,6 +9185,10 @@ case "$OS" in
   MINGW*|MSYS*|CYGWIN*) _store="Windows Credential Manager or a secrets manager" ;;
   *)      _store="a secrets manager" ;;
 esac
+# Opening a project in an editor or an agent runs its worm-style startup, so reading those scripts comes
+# before the fixes that open projects to move or rotate keys.
+[ "$N_WIRED" -gt 0 ] && todo 2 "Read the script each project in section 2 starts the way worms do, before an agent or editor opens that folder. If you didn't put it there, delete it, the hook and the task."
+[ "$N_UHOOK" -gt 0 ] && todo 2 "Check the session hooks section 2 lists in your own agent settings. If you didn't add them, delete them and read what is in the folder they run from."
 N_AK=$(count_lines "$AK_LINKS")
 [ "$N_AK" -gt 0 ] && todo 2 "Delete the links to ~/.ssh/authorized_keys listed in section 2."
 [ "$KEY_FILES" -gt 0 ] && todo 3 "Move keys out of shell profiles, history and .env files into $_store, then rotate them."
@@ -9082,8 +9201,6 @@ N_AK=$(count_lines "$AK_LINKS")
 [ "$N_REMOTE" -gt 0 ] && todo 1 "Remove the rules section 1 lists that let an agent run commands on other machines, or change them to ask first."
 [ "$N_OLD" -gt 0 ] && todo 1 "Update the tools listed in section 1 that have a security fix."
 [ "$N_IDLE" -gt 0 ] && todo 1 "Remove agents you no longer use: $IDLE_NAMES. A poisoned package can drive an installed agent, which is how the Nx attack stole keys."
-[ "$N_WIRED" -gt 0 ] && todo 2 "Read the script each project in section 2 starts the way worms do, before an agent or editor opens that folder. If you didn't put it there, delete it, the hook and the task."
-[ "$N_UHOOK" -gt 0 ] && todo 2 "Check the session hooks section 2 lists in your own agent settings. If you didn't add them, delete them and read what is in the folder they run from."
 [ "$N_AUTO" -gt 0 ] && todo 2 "Read the settings marked in section 2 before an agent or editor opens those folders, and delete anything you didn't put there yourself. A cloned project can bring these with it."
 [ "$N_LOOK" -gt 0 ] && todo 2 "Read the files section 2 lists as named like files worms plant, and delete any you didn't put there yourself."
 # A version to update needs its own fix unless the compromised-machine fix already deletes it (a

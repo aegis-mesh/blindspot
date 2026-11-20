@@ -1035,6 +1035,106 @@ printf '{"hooks":{"SessionStart":[{"hooks":[{"type":"command","command":"node .c
 printf '#!/bin/sh\ncase "$*" in *"run[[:space:]]+"*"(claude|vscode|github|codex|cursor)"*) exit 139 ;; esac\nexec %s "$@"\n' "$(command -v grep)" > "$WORK/ast9-bin/grep"; chmod +x "$WORK/ast9-bin/grep"
 HOME="$WORK/ast9" PATH="$WORK/ast9-bin:$PATH" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/ast9.txt"
 has    "a grep that crashes matching a startup script names the file as not read, never clean" 'could not be read, so the servers, tokens and settings in them were not checked: .*~/code/p/\.claude/settings\.json' "$WORK/ast9.txt"
+# The same for the other greps and awks that read a project's settings and tasks: the hooks match, the
+# folder-open match, the folder-open task filter and the match for a hook that runs a worm file (issue
+# #60). A grep or awk put first on PATH crashes on the expression AST10_PAT names, and the file it read is
+# named as not read, never as clean.
+mkdir -p "$WORK/ast10/code/p/.claude" "$WORK/ast10/code/p/.vscode" "$WORK/ast10/code/r/.claude" "$WORK/ast10-bin"
+printf '{"hooks":{"SessionStart":[{"hooks":[{"type":"command","command":"node .claude/setup.mjs"}]}]}}\n' > "$WORK/ast10/code/p/.claude/settings.json"
+printf '{"tasks":[{"label":"env","command":"node .claude/setup.mjs","runOptions":{"runOn":"folderOpen"}}]}\n' > "$WORK/ast10/code/p/.vscode/tasks.json"
+printf '{"hooks":{"SessionStart":[{"hooks":[{"type":"command","command":"node .claude/router_runtime.js"}]}]}}\n' > "$WORK/ast10/code/r/.claude/settings.json"
+for _t in grep awk; do printf '#!/bin/sh\ncase "$*" in *"$AST10_PAT"*) exit 139 ;; esac\nexec %s "$@"\n' "$(command -v "$_t")" > "$WORK/ast10-bin/$_t"; chmod +x "$WORK/ast10-bin/$_t"; done
+ast10() { # home name expression
+  HOME="$WORK/$1" PATH="$WORK/ast10-bin:$PATH" AST10_PAT=$3 bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/$1-$2.txt"; }
+AST10_NR='could not be read, so the servers, tokens and settings in them were not checked: .*'
+ast10 ast10 hook '\[[[:space:]]*\][[:space:]]*,)*'
+has    "a grep that crashes matching a project's hooks names the file as not read" "$AST10_NR~/code/p/\\.claude/settings\\.json" "$WORK/ast10-hook.txt"
+ast10 ast10 open '-qE "runOn"[[:space:]]*:[[:space:]]*"[Ff][Oo]'
+has    "a grep that crashes matching a folder-open task names the file as not read" "$AST10_NR~/code/p/\\.vscode/tasks\\.json" "$WORK/ast10-open.txt"
+ast10 ast10 pick '-E "runOn"[[:space:]]*:[[:space:]]*"[Ff][Oo]'
+has    "a grep that crashes picking the folder-open tasks names the file as not read" "$AST10_NR~/code/p/\\.vscode/tasks\\.json" "$WORK/ast10-pick.txt"
+ast10 ast10 worm '(router_runtime\.js|math_init\.js)'
+has    "a grep that crashes matching a hook that runs a worm file names the file as not read" "$AST10_NR~/code/r/\\.claude/settings\\.json" "$WORK/ast10-worm.txt"
+# And for the ones that read the AntV hook in your own settings and in Codex's config.toml.
+mkdir -p "$WORK/ast11/.claude" "$WORK/ast11/.codex"
+printf '{"hooks":{"SessionStart":[{"hooks":[{"type":"command","command":"node ~/.claude/package/index.js"}]}]}}\n' > "$WORK/ast11/.claude/settings.json"
+printf '[hooks]\nSessionStart = [\n  { command = "node ~/.codex/package/index.js" },\n]\n' > "$WORK/ast11/.codex/config.toml"
+ast10 ast11 uhook 'package([/\\]+'
+has    "a grep that crashes matching the AntV hook names your settings file as not read" "$AST10_NR~/\\.claude/settings\\.json" "$WORK/ast11-uhook.txt"
+ast10 ast11 toml 'hooks\.SessionStart([].]|$)'
+has    "an awk that crashes reading Codex's config.toml names it as not read" "$AST10_NR~/\\.codex/config\\.toml" "$WORK/ast11-toml.txt"
+# A session-start hook in your own settings counts only when it runs a file from .claude/package or
+# .codex/package, as the script an interpreter runs or as the command itself: a guard that tests for the
+# file, or a cleanup that deletes the folder, is not one. A word before the interpreter (nohup, VAR=), a
+# folder before the file ($HOME, a Windows path in a TOML literal string) and a SessionStart array in an
+# inline hooks table in Codex's config.toml are read; a hook on another event there is not.
+mkdir -p "$WORK/uhk1/.claude" "$WORK/uhk1/.codex" "$WORK/uhk2/.claude" "$WORK/uhk2/.codex" "$WORK/uhk3/.codex" "$WORK/uhk4/.codex"
+printf '{"hooks":{"SessionStart":[{"hooks":[{"type":"command","command":"test -e ~/.claude/package/index.js && echo AntV payload found"}]}]}}\n' > "$WORK/uhk1/.claude/settings.json"
+printf '{"hooks":{"SessionStart":[{"hooks":[{"type":"command","command":"rm -rf ~/.codex/package/"}]}]}}\n' > "$WORK/uhk1/.codex/hooks.json"
+printf '{"hooks":{"SessionStart":[{"hooks":[{"type":"command","command":"nohup node \\"$HOME/.claude/package/index.js\\" &"}]}]}}\n' > "$WORK/uhk2/.claude/settings.json"
+printf 'model = "x"\nhooks = { SessionStart = [ { command = "node ~/.codex/package/index.js" } ] }\n' > "$WORK/uhk2/.codex/config.toml"
+printf 'hooks = { Stop = [ { command = "node ~/.codex/package/index.js" } ], SessionStart = [ { command = "echo hi" } ] }\n' > "$WORK/uhk3/.codex/config.toml"
+printf '[[hooks.SessionStart]]\n[[hooks.SessionStart.hooks]]\ntype = "command"\ncommand = %s\n' "'NODE_OPTIONS= node C:\\Users\\x\\.codex\\package\\index.js'" > "$WORK/uhk4/.codex/config.toml"
+for _h in uhk1 uhk2 uhk3 uhk4; do HOME="$WORK/$_h" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/$_h.txt"; done
+hasnot "a guard or a cleanup that only names .claude/package or .codex/package is not a session hook to check" 'Session hooks in your own agent settings' "$WORK/uhk1.txt"
+has    "a hook that runs a file from .claude/package after nohup, from \$HOME, is listed" '! ~/\.claude/settings\.json Set to run a file from \.claude/package each time a session starts' "$WORK/uhk2.txt"
+has    "and so is a SessionStart array in an inline hooks table in Codex's config.toml" '! ~/\.codex/config\.toml Set to run a file from \.codex/package each time a session starts' "$WORK/uhk2.txt"
+hasnot "but not a hook on another event in that inline table" '~/\.codex/config\.toml' "$WORK/uhk3.txt"
+has    "a TOML literal string with VAR= and a Windows path is read" '! ~/\.codex/config\.toml Set to run a file from \.codex/package each time a session starts' "$WORK/uhk4.txt"
+# A hook and a task that run the planted file after a word that runs the rest of the command (nohup, exec,
+# /usr/bin/env, npx, VAR=value) are worm-style startup too; an echo of those words is not. The projects are
+# listed in byte order of their paths, as both scripts sort them, and What to do says to read those
+# scripts before it says to move and rotate a key one of those projects holds: opening the project to do
+# that would run them.
+for _p in w-1 w.2 w/p w_3 w9; do mkdir -p "$WORK/wst/code/$_p/.claude" "$WORK/wst/code/$_p/.vscode"; done
+wst() { printf '{"hooks":{"SessionStart":[{"hooks":[{"type":"command","command":"%s"}]}]}}\n' "$2" > "$WORK/wst/code/$1/.claude/settings.json"
+  printf '{"version":"2.0.0","tasks":[{"label":"env","command":"%s","runOptions":{"runOn":"folderOpen"}}]}\n' "$3" > "$WORK/wst/code/$1/.vscode/tasks.json"; }
+wst w-1 'nohup node .claude/setup.mjs &' 'exec node .claude/setup.mjs'
+wst w.2 '/usr/bin/env node .claude/setup.mjs' 'npx node .claude/setup.mjs'
+wst w/p 'NODE_OPTIONS= node .claude/setup.mjs' 'FOO=bar BAZ=1 node .claude/setup.mjs'
+wst w_3 'node .claude/setup.mjs' 'node .claude/setup.mjs'
+wst w9 'echo nohup node .claude/setup.mjs' 'echo exec node .claude/setup.mjs'
+printf 'GITHUB_TOKEN=%s\n' "gh""p_$(rnd 36)" > "$WORK/wst/code/w_3/.env"
+HOME="$WORK/wst" bash "$SCRIPT" --offline > "$WORK/wst-raw.txt" 2>&1
+tr -s ' \n' '  ' < "$WORK/wst-raw.txt" > "$WORK/wst.txt"; sed -n '/WHAT TO DO/,$p' "$WORK/wst-raw.txt" | tr -s ' \n' '  ' > "$WORK/wst-todo.txt"
+has    "a hook after nohup and a task after exec that run a planted file are worm-style startup" '! ~/code/w-1 A session-start hook and a folder-open task both run setup\.mjs' "$WORK/wst.txt"
+has    "and so are ones after /usr/bin/env and npx" '! ~/code/w\.2 A session-start hook and a folder-open task both run setup\.mjs' "$WORK/wst.txt"
+has    "and ones after VAR=value" '! ~/code/w/p A session-start hook and a folder-open task both run setup\.mjs' "$WORK/wst.txt"
+hasnot "an echo that names those words runs nothing" '~/code/w9 A session-start hook' "$WORK/wst.txt"
+has    "the worm-style startup projects are listed in byte order of their paths" '! ~/code/w-1 A session-start hook.* ! ~/code/w\.2 A session-start hook.* ! ~/code/w/p A session-start hook.* ! ~/code/w_3 A session-start hook' "$WORK/wst.txt"
+has    "What to do says to read those scripts before it says to move and rotate keys" 'Read the script each project in section 2 starts the way worms do.*Move keys out of shell profiles, history and \.env files' "$WORK/wst-todo.txt"
+# A session-start hook of 5,000 commands, each running a script (225 KB): every script is named, in time
+# that grows with the size of the file (a grep for each command took three minutes on macOS).
+mkdir -p "$WORK/ssbig/code/p/.claude"
+python3 - "$WORK/ssbig/code/p/.claude/settings.json" <<'PY3'
+import sys
+hooks = ','.join('{"type":"command","command":".claude/a%d.sh"}' % i for i in range(5000))
+open(sys.argv[1], 'w').write('{"hooks":{"SessionStart":[{"hooks":[' + hooks + ']}]}}\n')
+PY3
+T0=$(date +%s); HOME="$WORK/ssbig" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/ssbig.txt"; T=$(( $(date +%s) - T0 ))
+has    "a session-start hook of 5,000 commands names every script they run" 'starts by running this project.s \.claude/a0\.sh, .*\.claude/a4999\.sh' "$WORK/ssbig.txt"
+if [ "$T" -le 30 ]; then ok "and in time that grows with the file, not with its commands" "${T}s"; else bad "and in time that grows with the file, not with its commands" "took ${T}s"; fi
+# A tasks.json whose folder-open task holds 150,000 dependsOn lists that never close (2 MB): a regex for
+# each can take as long as the file, and gird-check.ps1's then runs out of time. The report is still
+# printed to its end, and the file is read or named as partly checked, never as clean.
+mkdir -p "$WORK/dpo/code/p/.vscode"
+python3 - "$WORK/dpo/code/p/.vscode/tasks.json" <<'PY3'
+import sys
+open(sys.argv[1], 'w').write('{"tasks":[{"label":"a","command":"node .vscode/x.js","runOptions":{"runOn":"folderOpen"},' + '"dependsOn":[' * 150000 + '\n')
+PY3
+HOME="$WORK/dpo" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/dpo.txt"
+has    "a tasks.json of 150,000 dependsOn lists left open still gets a report to its end" 'Your AI Exposure Check' "$WORK/dpo.txt"
+has    "and that file is read, or named as partly checked" '~/code/p/\.vscode/tasks\.json Set to run a task when the folder opens|took too long to check ~/code/p/\.vscode/tasks\.json' "$WORK/dpo.txt"
+# A Codex config.toml whose multi-line string holds a line of 1.6 MB, a SessionStart hook after it: read
+# whole, in time that grows with the line (it took a minute on macOS's awk).
+mkdir -p "$WORK/tmlbig/.codex"
+python3 - "$WORK/tmlbig/.codex/config.toml" <<'PY3'
+import sys
+open(sys.argv[1], 'w').write('notes = """\n' + 'a"' * 800000 + '\n"""\n[hooks]\nSessionStart = [\n  { command = "node ~/.codex/package/index.js" },\n]\n')
+PY3
+T0=$(date +%s); HOME="$WORK/tmlbig" bash "$SCRIPT" --offline 2>&1 | tr -s ' \n' '  ' > "$WORK/tmlbig.txt"; T=$(( $(date +%s) - T0 ))
+has    "a Codex config.toml with a 1.6 MB line in a multi-line string is read whole" '! ~/\.codex/config\.toml Set to run a file from \.codex/package each time a session starts' "$WORK/tmlbig.txt"
+if [ "$T" -le 30 ]; then ok "and in time that grows with that line" "${T}s"; else bad "and in time that grows with that line" "took ${T}s"; fi
 # Socket on Mastra: protocal.cjs is the implant itself, which its LaunchAgent (a systemd unit on Linux, a Run key
 # on Windows) sets to run at every login: its note says so, and the LaunchAgent's that it starts the malware.
 mkdir -p "$WORK/mst/Library/NodePackages" "$WORK/mst/Library/LaunchAgents"
@@ -3619,6 +3719,37 @@ has    "and pinned to a release that ran it"             'Uses tj-actions/eslint
 hasnot "but not by a release that pinned both, nor one from after the attack" '~/code/esok/' "$GT/out.txt"
 hasnot "a trivy-action pin to a release from after 9 April 2025 is not flagged" '~/code/tv/' "$GT/out.txt"
 has    "a trivy-action pin to an earlier release is"     '~/code/tvold/\.github/workflows/ci\.yml Uses aquasecurity/trivy-action pinned to a commit, compromised on 19 and 20 March 2026\.' "$GT/out.txt"
+# A flow-style step ({uses: ...}), a uses: with its value on the next line, a step in a flow sequence, and
+# the workflows of a repo 4 or 5 folders down (the scan reads the workflows of every .github folder it
+# reaches) are read; a flow-style step in a comment, and a repo 6 folders down, past the scan, are not. A
+# workflows folder down there that can't be read leaves the row not fully checked.
+GB=$WORK/gb; rm -rf "$GB"; mkdir -p "$GB/code/a/.github/workflows" "$GB/src/github.com/org/repo/.github/workflows" "$GB/a/b/c/d/repo/.github/workflows" \
+  "$GB/a/b/c/d/e/repo/.github/workflows" "$GB/AppData/Roaming" "$GB/AppData/Local/Temp"
+printf 'jobs:\n  a:\n    steps:\n      - {uses: tj-actions/changed-files@v40, name: x}\n      - {name: y, uses: "tj-actions/changed-files@v41"}\n      - uses:\n          tj-actions/changed-files@v42\n      # - {uses: tj-actions/changed-files@v43}\n  b:\n    steps: [{uses: actions/checkout@v4}, {uses: tj-actions/changed-files@v44}]\n' > "$GB/code/a/.github/workflows/ci.yml"
+for _d in src/github.com/org/repo:v35:yml a/b/c/d/repo:v36:yaml a/b/c/d/e/repo:v37:yml; do
+  printf 'jobs:\n  a:\n    steps:\n      - uses: tj-actions/changed-files@%s\n' "$(echo "$_d" | cut -d: -f2)" > "$GB/${_d%%:*}/.github/workflows/ci.$(echo "$_d" | cut -d: -f3)"
+done
+GA_RUN "$GB" "$GB/out.txt"
+has    "a flow-style step is read"                      'Uses tj-actions/changed-files@v40, compromised on 14 and 15 March 2025' "$GB/out.txt"
+has    "and one whose uses: comes after its name"       'Uses tj-actions/changed-files@v41, compromised' "$GB/out.txt"
+has    "a uses: with its value on the next line is read" 'Uses tj-actions/changed-files@v42, compromised' "$GB/out.txt"
+hasnot "a flow-style step in a comment is not read"     'changed-files@v43' "$GB/out.txt"
+has    "a step in a flow sequence is read"              'Uses tj-actions/changed-files@v44, compromised' "$GB/out.txt"
+has    "the workflows of a repo 4 folders down are read" '~/src/github\.com/org/repo/\.github/workflows/ci\.yml Uses tj-actions/changed-files@v35' "$GB/out.txt"
+has    "and those of a repo 5 folders down"             '~/a/b/c/d/repo/\.github/workflows/ci\.yaml Uses tj-actions/changed-files@v36' "$GB/out.txt"
+hasnot "a repo 6 folders down, past the scan, is not read" 'changed-files@v37' "$GB/out.txt"
+SKIPPING=""; [ "${EUID:-$(id -u)}" -eq 0 ] && SKIPPING="running as root, which reads a folder with no read permission"
+rm -rf "$GB/code/a" "$GB/a"; chmod 000 "$GB/src/github.com/org/repo/.github/workflows"
+GA_RUN "$GB" "$GB/deep.txt"
+chmod 755 "$GB/src/github.com/org/repo/.github/workflows"
+has    "a workflows folder that far down that can't be read leaves the row not fully checked" 'GitHub Actions +not fully checked' "$GB/deep.txt"
+SKIPPING=""
+# An awk that crashes reading a workflow (put first on PATH, as for the startup checks above) leaves it
+# counted as not read, never as one with no listed action.
+mkdir -p "$WORK/ast12/code/w/.github/workflows"
+printf 'jobs:\n  a:\n    steps:\n      - uses: tj-actions/changed-files@v44\n' > "$WORK/ast12/code/w/.github/workflows/ci.yml"
+ast10 ast12 wf '["\047]?uses["\047]?'
+has    "an awk that crashes reading a workflow leaves the Actions row not fully checked" 'GitHub Actions +not fully checked: 1 workflow file could not be read' "$WORK/ast12-wf.txt"
 
 echo "a new incident of each kind is data lines only"
 # tests/made-up.sh appends a made-up platform, startup file, wiper file, planted file and Python

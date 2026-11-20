@@ -1008,6 +1008,19 @@ function Scan-Tox([string]$dir) {
     foreach ($c in $cs) { if ($c.Name -ceq 'pyvenv.cfg' -and -not (Is-Link $c)) { Add-Plain $Found $c } }
   }
 }
+# A project's .github folder 5 or 6 folders down, where the scan stops before its workflows: its
+# workflows folder is listed as the scan would list it (regular files ending in .yml or .yaml), so a repo
+# as deep as ~/src/github.com/org/repo has its workflows read. One that can't be listed is named as a
+# folder not read. As gird-check.sh's scan_home.
+function Scan-Workflows([string]$dir) {
+  try { $wi = Get-Item -LiteralPath $dir -Force -ErrorAction Stop } catch { return }
+  if ((Is-Link $wi) -or -not (Is-DirInfo $wi)) { return }
+  try { $es = ([IO.DirectoryInfo]$dir).GetFileSystemInfos() } catch { $UnreadDirs.Add($dir); return }
+  foreach ($e in @($es | Sort-Object -Property Name -CaseSensitive)) {
+    if ((Is-Link $e) -or (Is-DirInfo $e)) { continue }
+    if ($e.Name -clike '*.yml' -or $e.Name -clike '*.yaml') { Add-Plain $Workflows $e }
+  }
+}
 function Scan-Home([string]$dir, [int]$depth) {
   try { $es = ([IO.DirectoryInfo]$dir).GetFileSystemInfos() } catch { $UnreadDirs.Add($dir); return }
   foreach ($e in @($es | Sort-Object -Property Name -CaseSensitive)) {
@@ -1020,6 +1033,7 @@ function Scan-Home([string]$dir, [int]$depth) {
       if ($name -ceq '.tox') { Scan-Tox $path; continue }
       if (Is-Pruned $path $name $d) { continue }
       if ($name -ceq 'site-packages') { $Sites.Add($path); continue }
+      if ($name -ceq '.github' -and $d -ge 5) { Scan-Workflows (J $path 'workflows') }
       if ($d -lt 6) { Scan-Home $path $d }
       continue
     }
@@ -1634,21 +1648,25 @@ $RxWormAlone = Worm-Cmd $WormNameAlone; $RxWormWeak = Worm-Cmd $WormNameWeak
 # folders agents and editors keep their files in. Projects do this too (a hook that sets up a tool's
 # path), so it is named for the person to check, never counted as malware. A command runs one as
 # Worm-Cmd reads it, with sh, bash, zsh and python too (never the code of -c, -e or -p), or as the
-# command itself. The same expressions as gird-check.sh's START_PATH and START_CMD.
+# command itself, and after the words that run the rest of a command: nohup, exec, env (as
+# /usr/bin/env too), npx and VAR=value. The same expressions as gird-check.sh's START_PATH and
+# START_CMD (start_cmd).
 $StartPath = '\.(claude|vscode|github|codex|cursor)([/\\]+[A-Za-z0-9._@+-]+)+'
 $RxStartPath = New-Object regex($StartPath, $RxOpt, $RxTimeout)
-$RxStartCmd = & {
-  $cf = '(\\"|'')?((\\")?\$\{?(CLAUDE_PROJECT_DIR|workspaceFolder)\}?(\\")?[/\\]+|\.[/\\]+)?' + $StartPath + '(\\"|["''\s;&|)])'
+function Start-Cmd([string]$path, [string]$pre) {
+  $cf = '(\\"|'')?' + $pre + $path + '(\\"|["''\s;&|)])'
   $cp = '(([^\s"\\]|\\\\)*(/|\\\\))?'
+  $cx = '((nohup|exec|npx|' + $cp + 'env)\s+|[A-Za-z_][A-Za-z0-9_]*=([^\s"''\\;&|]|\\\\)*\s+)*'
   $co = '(--|--[A-BDF-OQ-Za-bdf-oq-z0-9][^\s"\\]*|-[A-BDF-OQ-Za-bdf-oq-z0-9]+)\s+'
   $cq = '[^"\\'']|\\[^"]|''([^''"\\]|\\.)*''|\\"([^"\\]|\\[^"])*\\"'
   $cs = '"command"\s*:\s*"\s*((' + $cq + ')*(;|&&?|\|\|?)\s*)?'
   $cn = '(node|tsx|bun|deno|sh|bash|zsh|python[0-9.]*|py)(\.exe)?'
   $ci = '"command"\s*:\s*"' + $cp + $cn + '"'
-  $ca = '"args"\s*:\s*\[(\s*"(?:[^"\\]|\\.)*"\s*,)*\s*"(\$\{?(workspaceFolder|CLAUDE_PROJECT_DIR)\}?[/\\]+|\.[/\\]+)?' + $StartPath + '"'
+  $ca = '"args"\s*:\s*\[(\s*"(?:[^"\\]|\\.)*"\s*,)*\s*"(\$\{?(workspaceFolder|CLAUDE_PROJECT_DIR)\}?[/\\]+|\.[/\\]+)?' + $path + '"'
   $cb = '([^{}]|\{[^{}]*\})*'
-  New-Object regex(($cs + $cp + $cn + '\s+(' + $co + ')*(run\s+(' + $co + ')*)?' + $cf + '|' + $cs + $cf + '|' + $ci + $cb + $ca + '|' + $ca + $cb + $ci), $RxOpt, $RxTimeout)
+  New-Object regex(($cs + $cx + $cp + $cn + '\s+(' + $co + ')*(run\s+(' + $co + ')*)?' + $cf + '|' + $cs + $cx + $cf + '|' + $ci + $cb + $ca + '|' + $ca + $cb + $ci), $RxOpt, $RxTimeout)
 }
+$RxStartCmd = Start-Cmd $StartPath '((\\")?\$\{?(CLAUDE_PROJECT_DIR|workspaceFolder)\}?(\\")?[/\\]+|\.[/\\]+)?'
 # The elements of every array that is the value of the key $key, from Flat-Text's text: a
 # session-start hook's entries, or each task of a tasks.json. Strings are skipped whole and brackets
 # counted outside them only, so each character is looked at once. As gird-check.sh's json_elems.
@@ -1712,24 +1730,33 @@ $RxLabel = New-Object regex('"label"\s*:\s*"((?:[^"\\]|\\.)*)"', $RxOpt, $RxTime
 # With a filter, a task one of those elements lists in dependsOn by label counts too: one level, so a
 # task the dependency itself depends on does not. As gird-check.sh's start_scripts.
 function Start-Scripts([string]$f, [string]$t, [string]$key, [regex]$filter) {
-  $set = New-Object 'System.Collections.Generic.SortedSet[string]' ([StringComparer]::Ordinal)
   $all = New-Object System.Collections.Generic.List[string]; foreach ($x in (Json-Elems $t $key)) { $all.Add($x) }
   $sel = New-Object System.Collections.Generic.List[string]
   foreach ($el in $all) { if (-not $filter -or (Flat-Match $f $el $filter)) { $sel.Add($el) } }
   if ($filter -and $sel.Count -gt 0) {
-    $want = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::Ordinal)
-    foreach ($el in @($sel)) {
-      foreach ($dm in $RxDepends.Matches($el)) { foreach ($lm in $RxQuoted.Matches($dm.Groups[1].Value)) { [void]$want.Add($lm.Groups[1].Value) } }
-    }
-    foreach ($el in $all) {
-      $lb = $RxLabel.Match($el)
-      if ($lb.Success -and $want.Contains($lb.Groups[1].Value) -and -not $sel.Contains($el)) { $sel.Add($el) }
-    }
-  }
-  foreach ($el in $sel) {
+    # A crafted file can make these run out of time, as any regex here can: the file is then partly
+    # checked (Mark-Slow), never a stop of the whole check.
     try {
-      foreach ($m in @(@($el) + @(Cmd-Parts $el) | ForEach-Object { $RxStartCmd.Matches($_) })) {
-        $ps = $RxStartPath.Matches($m.Value)
+      $want = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::Ordinal)
+      foreach ($el in @($sel)) {
+        foreach ($dm in $RxDepends.Matches($el)) { foreach ($lm in $RxQuoted.Matches($dm.Groups[1].Value)) { [void]$want.Add($lm.Groups[1].Value) } }
+      }
+      foreach ($el in $all) {
+        $lb = $RxLabel.Match($el)
+        if ($lb.Success -and $want.Contains($lb.Groups[1].Value) -and -not $sel.Contains($el)) { $sel.Add($el) }
+      }
+    } catch { Mark-Slow $f }
+  }
+  Cmd-Scripts $f $sel $RxStartCmd $RxStartPath
+}
+# The scripts the commands in these elements run: each command whole and each part of it (Cmd-Parts) is
+# matched, and the script is the last path in the match. As gird-check.sh's cmd_scripts.
+function Cmd-Scripts([string]$f, $els, [regex]$rxCmd, [regex]$rxPath) {
+  $set = New-Object 'System.Collections.Generic.SortedSet[string]' ([StringComparer]::Ordinal)
+  foreach ($el in $els) {
+    try {
+      foreach ($m in @(@($el) + @(Cmd-Parts $el) | ForEach-Object { $rxCmd.Matches($_) })) {
+        $ps = $rxPath.Matches($m.Value)
         if ($ps.Count -gt 0) { [void]$set.Add(($ps[$ps.Count - 1].Value -replace '[/\\]+', '/')) }
       }
     } catch { Mark-Slow $f }
@@ -2672,6 +2699,10 @@ foreach ($x in $StartHooks) {
   if ($null -ne (Planted-Note $x.Script) -and $TaskSet.Contains($k) -and $WiredSeen.Add($k)) { $Wired.Add(@{ Proj = $x.Proj; Name = $b }); [void]$WiredProj.Add($x.Proj) }
 }
 $Wired = @($Wired | Where-Object { $r = $_.Proj -replace '[/\\]\.claude[/\\]worktrees[/\\].*$', ''; -not ($r -ne $_.Proj -and $WiredProj.Contains($r)) })
+# In the order gird-check.sh lists them: byte order of the path with / between folders, then the name.
+# The Array overload sorts $Wired itself (a generic one would sort a copy of it).
+$wk = [string[]]@($Wired | ForEach-Object { $_.Proj.Replace('\', '/') + "`t" + $_.Name })
+[Array]::Sort([Array]$wk, [Array]$Wired, [Collections.IComparer][StringComparer]::Ordinal)
 $WiredP = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::Ordinal)
 foreach ($x in $Wired) { [void]$WiredP.Add($x.Proj) }
 $N_WIRED = $WiredP.Count
@@ -2681,10 +2712,40 @@ $N_WIRED = $WiredP.Count
 # reads hooks from hooks.json and from config.toml's [hooks] tables (its hooks docs); a settings.json
 # there is read too, as the worm writes such files. In config.toml only the SessionStart tables count,
 # with # comments outside strings removed: a [[hooks.SessionStart]] table, or a SessionStart array
-# under [hooks] (or hooks.SessionStart at the top), to the bracket that closes it. As gird-check.sh's
+# under [hooks] (or hooks.SessionStart at the top), to the bracket that closes it, or in an inline
+# table at the top (hooks = { SessionStart = [ ... ] }), that array alone. As gird-check.sh's
 # toml_session_start.
+# The inline table hooks = { ... }, read over as many lines as it takes, its strings skipped: B and A are
+# its { and [ depths, Q the quote of the string it is in, K the key being read at the level of the table
+# itself (its characters but spaces and tabs, the first 64), On while in the array whose key is
+# SessionStart, which is added a line for each line it is on. As gird-check.sh's inl.
+$TomlInlStops = [char[]]@('"', "'", '\', '{', '}', '[', ']', ',')
+function Toml-Inline([string]$l, $s, $out) {
+  $i = 0; $n = $l.Length; $ps = 0
+  while ($i -lt $n) {
+    $k = $l.IndexOfAny($TomlInlStops, $i); if ($k -lt 0) { $k = $n }
+    if ($k -gt $i -and $s.B -eq 1 -and $s.A -eq 0 -and $s.K.Length -lt 64) { $x = $l.Substring($i, $k - $i) -replace '[ \t\r]', ''; $s.K += $x.Substring(0, [Math]::Min($x.Length, 64 - $s.K.Length)) }
+    if ($k -ge $n) { break }
+    $c = [string]$l[$k]; $i = $k + 1
+    if ($s.Q) {
+      if ($c -eq '\' -and $s.Q -eq '"' -and $k + 1 -lt $n) { $c = $l.Substring($k, 2); $i = $k + 2 }
+      elseif ($c -eq $s.Q) { $s.Q = '' }
+    } elseif ($c -eq '"' -or $c -eq "'") { $s.Q = $c }
+    elseif ($c -ne '\') {
+      if ($c -eq '[' -and -not $s.On -and $s.B -eq 1 -and $s.A -eq 0 -and $s.K -cmatch '^["'']?SessionStart["'']?=$') { $s.On = $true; $ps = $k }
+      if ($c -eq '{') { $s.B++ }
+      elseif ($c -eq '}') { $s.B--; if ($s.B -le 0) { if ($s.On) { $out.Add($l.Substring($ps, $k - $ps + 1)) }; $s.On = $false; $s.Il = $false; return } }
+      elseif ($c -eq '[') { $s.A++ }
+      elseif ($c -eq ']') { $s.A--; if ($s.A -le 0 -and $s.On) { $out.Add($l.Substring($ps, $k - $ps + 1)); $s.On = $false } }
+      $s.K = ''; continue
+    }
+    if ($s.B -eq 1 -and $s.A -eq 0 -and $s.K.Length -lt 64) { $s.K += $c }
+  }
+  if ($s.On) { $out.Add($l.Substring($ps)) }
+}
 function Toml-SessionStart([string]$t) {
   $out = New-Object System.Collections.Generic.List[string]; $in = $false; $hk = $false; $top = $true; $d = 0; $ml = ''
+  $is = @{ Il = $false; B = 0; A = 0; Q = ''; K = ''; On = $false }
   foreach ($line in ($t -split "`n")) {
     # A multi-line string (""" or ''') goes on over lines, # and brackets in it too; $br counts [ less ] outside strings.
     $q = ''; $i = 0; $cut = $line.Length; $br = 0; $inml = ($ml -ne '')
@@ -2708,30 +2769,57 @@ function Toml-SessionStart([string]$t) {
       else { $k = $line.IndexOfAny([char[]]@('"', '\'), $i); if ($k -lt 0) { break }; if ($line[$k] -eq '\') { $i = $k + 2 } else { $q = ''; $i = $k + 1 } }
     }
     $l = $line.Substring(0, $cut)
+    if ($is.Il) { Toml-Inline $l $is $out; continue }
     if ($d -gt 0) { $out.Add($l); $d += $br; continue }
     if ($inml) { if ($in) { $out.Add($l) }; continue }
     if ($l -match '^\s*\[') { $h = $l -replace '[\s"'']', ''; $in = $h -cmatch '^\[\[?hooks\.SessionStart([\].]|$)'; $hk = ($h -ceq '[hooks]'); $top = $false; continue }
     if ($in) { $out.Add($l); continue }
-    if (($hk -and $l -cmatch '^\s*["'']?SessionStart["'']?\s*=') -or ($top -and $l -cmatch '^\s*hooks\.SessionStart\s*=')) { $out.Add($l); $d = $br }
+    if (($hk -and $l -cmatch '^\s*["'']?SessionStart["'']?\s*=') -or ($top -and $l -cmatch '^\s*hooks\.SessionStart\s*=')) { $out.Add($l); $d = $br; continue }
+    if ($top -and $l -cmatch '^\s*["'']?hooks["'']?\s*=\s*\{') { $is.B = 0; $is.A = 0; $is.Q = ''; $is.K = ''; $is.On = $false; $is.Il = $true; Toml-Inline $l $is $out }
   }
   $out -join "`n"
+}
+# Each command = "..." in these TOML lines, written as JSON writes it ("command": "..."), for
+# Cmd-Scripts: a literal string ('...' or '''...''') with its \ and " escaped, a basic one ("..." or
+# """...""") as it is. As gird-check.sh's toml_cmds.
+$RxTomlCmd = New-Object regex('(^|[^A-Za-z0-9_=-])["'']?command["'']?\s*=\s*("""(("|"")?([^"\\]|\\.))*("|"")?"""|''''''((''|'''')?[^''])*(''|'''')?''''''|"([^"\\]|\\.)*"|''[^'']*'')', $RxOpt, $RxTimeout)
+function Toml-Cmds([string]$f, [string]$t) {
+  $o = New-Object System.Collections.Generic.List[string]
+  try {
+    foreach ($line in $t.Split("`n")) {
+      foreach ($m in $RxTomlCmd.Matches($line)) {
+        $v = $m.Groups[2].Value
+        if ($v.StartsWith("'''")) { $c = $v.Substring(3, $v.Length - 6).Replace('\', '\\').Replace('"', '\"') }
+        elseif ($v.StartsWith("'")) { $c = $v.Substring(1, $v.Length - 2).Replace('\', '\\').Replace('"', '\"') }
+        elseif ($v.StartsWith('"""')) { $c = $v.Substring(3, $v.Length - 6) }
+        else { $c = $v.Substring(1, $v.Length - 2) }
+        $o.Add('"command": "' + $c + '"')
+      }
+    }
+  } catch { Mark-Slow $f }
+  ,$o
 }
 $UserHooks = New-Object System.Collections.Generic.List[object]
 $cxd = Env-Or 'CODEX_HOME' (J $HomeDir '.codex')
 $ccd = Env-Or 'CLAUDE_CONFIG_DIR' (J $HomeDir '.claude')
 $UHookFiles = @((J $ccd 'settings.json'), (J $cxd 'hooks.json'), (J $cxd 'settings.json'), (J $cxd 'config.toml'))
-$RxPkg = New-Object regex('\.(claude|codex)[/\\]+package[/\\]', $RxOpt, $RxTimeout)
+# A hook runs a file from there when that file is the script an interpreter runs, or the command itself,
+# as Start-Cmd reads a command, with any folder before .claude or .codex: a guard that only tests for
+# the file, or a command that deletes it, does not. As gird-check.sh's UH_PATH and UH_CMD.
+$UhPath = '\.(claude|codex)[/\\]+package([/\\]+[A-Za-z0-9._@+-]+)*[/\\]*'
+$RxUhPath = New-Object regex($UhPath, $RxOpt, $RxTimeout)
+$RxUhCmd = Start-Cmd $UhPath '(([^\s"''\\;&|]|\\\\)*(/|\\\\))?'
 foreach ($uf in @((J $ccd 'settings.json'), (J (J $HomeDir '.claude') 'settings.json'), (J $cxd 'hooks.json'), (J $cxd 'settings.json'), (J $cxd 'config.toml'))) {
   if (-not (Is-File $uf) -or (Too-Big $uf) -or @($UserHooks | Where-Object { $_.File -eq $uf }).Count -gt 0) { continue }
   if ($uf.EndsWith('.toml')) {
     $ut = Read-Text $uf; if ($null -eq $ut) { continue }
-    $ut = Toml-SessionStart ($ut -replace "`r", '')
+    $els = Toml-Cmds $uf (Toml-SessionStart ($ut -replace "`r", ''))
   } else {
     $ft = Flat-Text $uf; if ($null -eq $ft) { continue }
-    $ut = (Json-Elems $ft 'SessionStart') -join "`n"
+    $els = Json-Elems $ft 'SessionStart'
   }
-  $m = $null; try { $m = $RxPkg.Match($ut) } catch { Mark-Slow $uf }
-  if ($m -and $m.Success) { $UserHooks.Add(@{ File = $uf; Dir = '.' + $m.Groups[1].Value + '/package' }) }
+  $ss = @(Cmd-Scripts $uf $els $RxUhCmd $RxUhPath)
+  if ($ss.Count -gt 0) { $UserHooks.Add(@{ File = $uf; Dir = ($ss[0] -creplace '^\.(claude|codex)/package.*$', '.$1/package') }) }
 }
 $N_UHOOK = $UserHooks.Count
 
@@ -7847,19 +7935,42 @@ $ActTable = @(
   ,@('actions-cool/maintain-one-comment', 'actions-cool/maintain-one-comment', 'v3.3.0 v3.2.1 v3.2.0 v3.1.1 v3.1.0 v3 v2.0.2 v2.0.1 v2.0.0 v2 v1.2.1 v1.2.0 v1.1.0 v1.0.0 v0.0.1-wip', '7f6120bb10c870b9fde146961a18e5bf0b3d4401,4a6ac28684e2b0c48d502b31363ec5dd72f9d7ff,f3593fb4454aff5a6e1fb67024f94bfa48591dd5,5d844d6b1c6a0c09a96844521bb01f149d9fe2c1,2ab0aa3449ffe526ea64489193955d82a6848669,c43d668894bebbeea688878ab6774fa405f22251,93ec180e89e8fdd8525869daa5590c433b6c30fb,cbb2ba52a811cb6152eee0607519cc5df78289b5,99b7f41bf9e14a2a2c7cc524731336543f552178,ef01721dfd04f9c7ff1a256292f7dceabfd08d9b,d6622cc2415156cf4e81cf57866420479a966b3a,74b8a9a600daf6fc6070ca0a10d840a7bb6890ae,cae76b34894429e693e9b0d2731e7654c373ce81,7bb44528a0869f4074cc5448601804878704963f,8bb68050bc2a353f9d3032e2b42732a69d97499b', '-', 'safe', 'from 18 May 2026', 'stepsecurity.io', 'Remove it. Every tag was moved to a malicious commit.')
 )
 # <<< actions
+# A uses: is read in a block mapping (- uses: x@v1), with its value on the next line when that line is
+# indented more than the key (uses: on its own, or with | or >), and in a flow mapping ({uses: x@v1}),
+# after the { or a , on a line that has one, a # comment cut off first. As gird-check.sh's act_uses.
+function Act-Use([string]$v) {
+  if ($v.Length -gt 0 -and ($v[0] -eq '"' -or $v[0] -eq "'")) {
+    $q = $v[0]; $v = $v.Substring(1); $i = $v.IndexOf($q); if ($i -lt 0) { return }; $v = $v.Substring(0, $i)
+  } else { $v = $v -replace '[ \t]+#.*$', '' -replace '[ \t]+$', '' }
+  $at = $v.IndexOf('@'); if ($at -lt 0) { return }
+  $a = $v.Substring(0, $at); $r = $v.Substring($at + 1)
+  if ($a -cnotmatch '^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+(/.*)?$' -or $r -eq '' -or $r -match '[ \t]') { return }
+  $p = $a.Split('/'); ,@(($p[0] + '/' + $p[1]).ToLowerInvariant(), $r)
+}
 function Act-Uses([string]$t) {
+  $nx = 0
   foreach ($line in $t.Split("`n")) {
     $line = $line -replace "`r$", ''
+    if ($nx -gt 0) {
+      if ($line -match '^[ \t]*(#|$)') { continue }
+      $w = $nx; $nx = 0; $ind = [regex]::Match($line, '^[ \t]*').Length
+      if ($ind -ge $w) { Act-Use $line.Substring($ind); continue }
+    }
     $m = [regex]::Match($line, '^[ \t]*(-[ \t]+)?["'']?uses["'']?[ \t]*:[ \t]*')
-    if (-not $m.Success) { continue }
-    $v = $line.Substring($m.Length)
-    if ($v.Length -gt 0 -and ($v[0] -eq '"' -or $v[0] -eq "'")) {
-      $q = $v[0]; $v = $v.Substring(1); $i = $v.IndexOf($q); if ($i -lt 0) { continue }; $v = $v.Substring(0, $i)
-    } else { $v = $v -replace '[ \t]+#.*$', '' -replace '[ \t]+$', '' }
-    $at = $v.IndexOf('@'); if ($at -lt 0) { continue }
-    $a = $v.Substring(0, $at); $r = $v.Substring($at + 1)
-    if ($a -cnotmatch '^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+(/.*)?$' -or $r -eq '' -or $r -match '[ \t]') { continue }
-    $p = $a.Split('/'); ,@(($p[0] + '/' + $p[1]).ToLowerInvariant(), $r)
+    if ($m.Success) {
+      $v = $line.Substring($m.Length)
+      if ($v -match '^(#.*)?$' -or $v -match '^[|>][0-9+-]*[ \t]*(#.*)?$') { $nx = [regex]::Match($line, '^[ \t]*(-[ \t]+)?').Length + 1; continue }
+      Act-Use $v; continue
+    }
+    if ($line.IndexOf('{') -lt 0 -or $line -match '^[ \t]*#') { continue }
+    $s = $line; $h = $s.IndexOf(' #'); if ($h -ge 0) { $s = $s.Substring(0, $h) }; $h = $s.IndexOf("`t#"); if ($h -ge 0) { $s = $s.Substring(0, $h) }
+    $c = $s.Split('{')
+    for ($i = 1; $i -lt $c.Length; $i++) {
+      foreach ($d in $c[$i].Split(',')) {
+        $m = [regex]::Match($d, '^[ \t]*["'']?uses["'']?[ \t]*:[ \t]*')
+        if ($m.Success) { $v = $d.Substring($m.Length); $k = $v.IndexOf('}'); if ($k -ge 0) { $v = $v.Substring(0, $k) }; Act-Use $v }
+      }
+    }
   }
 }
 $ActHits = New-Object System.Collections.Generic.List[object]; $ActSeen = New-Object Collections.Hashtable ([StringComparer]::Ordinal); $ActUnread = 0; $N_WF = 0
@@ -8085,6 +8196,10 @@ if ($LITELLM_HIT -eq 0 -and $LitePyc.Count -gt 0) { Add-Todo 5 'A leftover cook.
 Add-Advice 'lock'
 Add-Advice 'update'
 $Store = 'a secrets manager'; if ($OnWindows) { $Store = 'Windows Credential Manager or a secrets manager' }
+# Opening a project in an editor or an agent runs its worm-style startup, so reading those scripts comes
+# before the fixes that open projects to move or rotate keys.
+if ($N_WIRED -gt 0) { Add-Todo 2 'Read the script each project in section 2 starts the way worms do, before an agent or editor opens that folder. If you didn''t put it there, delete it, the hook and the task.' }
+if ($N_UHOOK -gt 0) { Add-Todo 2 'Check the session hooks section 2 lists in your own agent settings. If you didn''t add them, delete them and read what is in the folder they run from.' }
 $N_AK = $AkLinks.Count
 if ($N_AK -gt 0) { Add-Todo 2 'Delete the links to ~/.ssh/authorized_keys listed in section 2.' }
 if ($KEY_FILES -gt 0) { Add-Todo 3 "Move keys out of shell profiles, history and .env files into $Store, then rotate them." }
@@ -8097,8 +8212,6 @@ if ($N_YOLO -gt 0) { Add-Todo 1 'Turn off run-without-asking in the agents liste
 if ($N_REMOTE -gt 0) { Add-Todo 1 'Remove the rules section 1 lists that let an agent run commands on other machines, or change them to ask first.' }
 if ($N_OLD -gt 0) { Add-Todo 1 'Update the tools listed in section 1 that have a security fix.' }
 if ($N_IDLE -gt 0) { Add-Todo 1 "Remove agents you no longer use: $($IdleNames -join ', '). A poisoned package can drive an installed agent, which is how the Nx attack stole keys." }
-if ($N_WIRED -gt 0) { Add-Todo 2 'Read the script each project in section 2 starts the way worms do, before an agent or editor opens that folder. If you didn''t put it there, delete it, the hook and the task.' }
-if ($N_UHOOK -gt 0) { Add-Todo 2 'Check the session hooks section 2 lists in your own agent settings. If you didn''t add them, delete them and read what is in the folder they run from.' }
 if ($N_AUTO -gt 0) { Add-Todo 2 'Read the settings marked in section 2 before an agent or editor opens those folders, and delete anything you didn''t put there yourself. A cloned project can bring these with it.' }
 if ($N_LOOK -gt 0) { Add-Todo 2 'Read the files section 2 lists as named like files worms plant, and delete any you didn''t put there yourself.' }
 # A version to update needs its own fix unless the compromised-machine fix already deletes it (a

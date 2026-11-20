@@ -1861,17 +1861,20 @@ A project whose workflows (`.github/workflows/*.yml` and `*.yaml`) use one of th
   beside it.
 - When a session-start hook or a task that runs on opening runs a script from the project's own
   `.claude`, `.vscode`, `.github`, `.codex` or `.cursor` folder (with node, bun, deno, tsx, sh, bash,
-  zsh, python or py, or as the command itself, in any part of a command split at `;`, `&` or `|`), the
-  row names that script for you to read: projects do this too, such as a hook that sets up a tool's
-  path.
+  zsh, python or py, or as the command itself, in any part of a command split at `;`, `&` or `|`, also
+  after `nohup`, `exec`, `env`, `npx` or `VAR=value`), the row names that script for you to read:
+  projects do this too, such as a hook that sets up a tool's path.
 - A project where a session-start hook and a folder-open task both run one of the files worms plant in
   `.claude` or `.vscode` (the folder and the name, from `data/planted.tsv`), the way the Mini
   Shai-Hulud and AntV worms start themselves (Wiz, SafeDep), is listed on its own, first, still as a
   script to read: the file counts as malware only by its published SHA-256 or beside a worm's own
   file.
 - So is a session-start hook in your own Claude Code or Codex settings (`settings.json`, Codex's
-  `hooks.json` or the SessionStart hooks in its `config.toml`) that runs a file from `.claude/package`
-  or `.codex/package`, where the AntV wave copies its payload (SafeDep), even after that copy is gone.
+  `hooks.json` or the SessionStart hooks in its `config.toml`, in a table or an inline `hooks = { ... }`)
+  that runs a file from `.claude/package` or `.codex/package`, where the AntV wave copies its payload
+  (SafeDep), even after that copy is gone. It counts when it runs that file the way a project's hook
+  runs a script, so a guard that only tests for the file, or a command that deletes the folder, does
+  not.
 - A project's `.vscode/settings.json` that sets the old `chat.tools.autoApprove`, the setting the
   CVE-2025-53773 attack wrote, is listed too. VS Code 1.104 and later ignore it, so it is a sign to
   look at, not a setting in force.
@@ -1979,8 +1982,9 @@ What is not on the lists, and why:
 
 GitHub Actions workflows:
 
-- It reads the workflows of the projects it finds (`.github/workflows/*.yml` and `*.yaml`) for an
-  action whose code was replaced by malware for a time, from its GitHub advisory or a named research
+- It reads the workflows of the projects it finds (`.github/workflows/*.yml` and `*.yaml`, in every
+  `.github` folder the home scan reaches, so a repo up to 5 folders down, such as
+  `~/src/github.com/org/repo`) for an action whose code was replaced by malware for a time, from its GitHub advisory or a named research
   firm's post. A use matches on a tag or a malicious commit its source names. A pin to any other
   commit does not, except for the five reviewdog actions, whose advisory says every pin ran the
   malware, `tj-actions/eslint-changed-files`, whose versions that ran `reviewdog/action-setup@v1`
@@ -1991,6 +1995,8 @@ GitHub Actions workflows:
   so a match is a project to check, never a compromised machine: check the workflows' run logs from
   then, rotate the secrets they could read, look in the project's history for commits by
   `github-actions[bot]` you didn't make, and pin or remove the action.
+- A `uses:` is read in a step written as a block (`- uses: ...`, its value on the same line or the
+  next) or as a flow mapping (`- {uses: ...}`, `[{uses: ...}]`).
 - Composite actions a project keeps in its own folders, and workflows in folders below
   `.github/workflows`, which GitHub does not run, are not read.
 
@@ -1999,7 +2005,8 @@ Each data file's header gives the sources and reasons for every line.
 ## What it does not read
 
 - Containers, servers and CI.
-- The home scan goes 6 folders deep and skips dependency, build and cache folders (`node_modules`,
+- The home scan goes 6 folders deep (a project's GitHub workflows 8, so a repo 5 folders down has
+  them read) and skips dependency, build and cache folders (`node_modules`,
   `build`, `dist`, `target` and `vendor` among them). A lockfile or project file deeper or in one of
   those is not read, and the npm row says so.
 - These are named as not checked, and the summary doesn't read clean over them:
