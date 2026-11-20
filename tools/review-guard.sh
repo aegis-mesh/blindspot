@@ -35,8 +35,9 @@
 #   network   in code, an added line that names a network tool where a command starts (after
 #             sudo, timeout, env and the like too, and with its folder or .exe), or a network API
 #             (NET_SH and NET_PS below), comments included; and an http(s) URL in a line
-#             that is not only a # comment, in any code but tests/ and the blocks tools/gen.sh
-#             writes from data/: a URL in a test is fixture data, and a test that calls out is
+#             that is not only a # comment, in any code but tests/ and the closed blocks tools/gen.sh
+#             writes from data/ into that file (by the names in gen.sh's own list for it): a URL
+#             in a test is fixture data, and a test that calls out is
 #             caught by the tool it calls with. In *.md, a network tool in a fenced code block,
 #             since people run a doc's commands.
 #   shrink    a removed line in data/*.tsv, other than a # comment or a blank line
@@ -239,6 +240,20 @@ image_ok() {
   esac
   return 1
 }
+# gen_blocks PATH: the names of the blocks the base's tools/gen.sh writes into PATH, one per line,
+# read from its own list (the blocks= lines of its loop over the files it writes), so the two
+# never differ. Nothing when gen.sh does not write into PATH or its list can't be read.
+gen_blocks() {
+  git show "$BASE:tools/gen.sh" 2>/dev/null | awk -v f="$1" '
+    /^for f in [^;]*; do$/ { l = $0; sub(/^for f in /, "", l); sub(/; do$/, "", l); split("", mine); split("", named)
+      k = split(l, a, " "); for (i = 1; i <= k; i++) mine[a[i]] = 1; next }
+    /^[[:space:]]*(if|elif) \[ "\$f" = [^ ]+ \]; then blocks="[^"]*"$/ {
+      m = $0; sub(/^[^=]*= /, "", m); sub(/ \].*$/, "", m); named[m] = 1
+      if (m == f && (f in mine)) { b = $0; sub(/^.*blocks="/, "", b); sub(/".*$/, "", b); print b; exit } next }
+    /^[[:space:]]*else blocks="[^"]*"; fi$/ {
+      if ((f in mine) && !(f in named)) { b = $0; sub(/^.*blocks="/, "", b); sub(/".*$/, "", b); print b }
+      exit }' | tr ' ' '\n' | grep -E '^[a-z0-9-]+$'
+}
 # fences: "number<TAB>sh" or "number<TAB>ps" for each line of HEAD's PATH inside a fenced code
 # block (``` or ~~~), ps when the block is marked powershell, pwsh, ps or ps1.
 fences() {
@@ -344,12 +359,16 @@ while IFS= read -r -d '' meta && IFS= read -r -d '' path; do
     case "$path" in
       tests/*) ;;
       *)
-        # Lines tools/gen.sh writes from data/ (between "# >>> NAME: generated from data/" and
-        # "# <<< NAME") carry the data's source URLs; gen.sh --check holds them to the data files.
-        { echo 0; git show "$HEAD:$path" 2>/dev/null | awk '
-          /^[[:space:]]*# >>> [a-z-]+: generated from data\// { g = 1; next }
-          /^[[:space:]]*# <<< / { g = 0 }
-          g { print NR }'; } > "$W/gen"
+        # Lines tools/gen.sh writes from data/ carry the data's source URLs, and gen.sh --check
+        # holds them to the data files. That holds only for a block gen.sh writes into this file
+        # (its name is in gen.sh's list for it), between "# >>> NAME: generated from data/" and
+        # "# <<< NAME" at the start of a line, as gen.sh splices them, and only once it is closed.
+        gen_blocks "$path" > "$W/genblocks"
+        { echo 0; git show "$HEAD:$path" 2>/dev/null | awk -v list="$W/genblocks" '
+          BEGIN { while ((getline l < list) > 0) ok[l] = 1 }
+          open == "" && /^# >>> [a-z0-9-]+: generated from data\// { n = $3; sub(/:$/, "", n); if (n in ok) { open = n; k = 0 } next }
+          open != "" && $0 == "# <<< " open { for (i = 1; i <= k; i++) print buf[i]; open = ""; next }
+          open != "" { buf[++k] = NR }'; } > "$W/gen"
         awk -F "$TAB" 'NR == FNR { gen[$1] = 1; next } !($1 in gen) && $2 !~ /^[[:space:]]*#/' "$W/gen" "$W/code" > "$W/code-own"
         rule network "$URL" "$W/code-own" -i ;;
     esac

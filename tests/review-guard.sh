@@ -15,6 +15,7 @@ g() { git -C "$R" -c user.name=test -c user.email=test@example.invalid -c commit
 mkdir -p "$R/tools" "$R/data"
 git init -q "$R" > /dev/null 2>&1 || { echo "tests/review-guard.sh: git init failed"; exit 1; }
 cp "$GUARD" "$R/tools/review-guard.sh"
+cp tools/gen.sh "$R/tools/gen.sh"   # the guard reads which blocks gen.sh writes into each file
 cat > "$R/gird-check.sh" <<'EOF'
 #!/usr/bin/env bash
 eval "$(printf 'x=1')"
@@ -423,9 +424,18 @@ want "a decoder piped into a shell inside a test fixture's quotes is flagged" 1 
 has "and a pipe into a shell inside one" '^run: tests/t\.sh:2:' "$OUT"
 
 kase gen <<'EOF'
-printf '%s\n' '# >>> x: generated from data/x.tsv by tools/gen.sh.' 'X="a https://example.org/a"' '# <<< x' >> gird-check.sh
+printf '%s\n' '# >>> keys: generated from data/keys.tsv by tools/gen.sh. Edit that file, then run it.' 'X="a https://example.org/a"' '# <<< keys' >> gird-check.sh
 EOF
 want "a URL in a block tools/gen.sh writes from data is not flagged" 0
+
+kase fakegen <<'EOF'
+{ printf '%s\n' '# >>> keys-extra: generated from data/keys.tsv by tools/gen.sh. Edit that file, then run it.' 'WEB=https://gird-ai.example' '# <<< keys-extra'
+  printf '%s\n' '# >>> mitre: generated from data/mitre.tsv by tools/gen.sh. Edit that file, then run it.' 'X="https://example.org/m"' '# <<< mitre'
+  printf '%s\n' '# >>> keys: generated from data/keys.tsv by tools/gen.sh. Edit that file, then run it.' 'Y="https://example.org/open"'; } >> gird-check.sh
+EOF
+want "a URL in a block whose name tools/gen.sh does not write is flagged" 1 '^network: gird-check\.sh:5:'
+has "and in a block gen.sh writes only into another file" '^network: gird-check\.sh:8:' "$OUT"
+has "and in a block that is never closed" '^network: gird-check\.sh:11:' "$OUT"
 
 (cd "$R" && bash tools/review-guard.sh "$BASE") > /dev/null 2>&1; RC=$?
 if [ "$RC" -eq 2 ]; then ok "one argument is a usage error"; else bad "one argument is a usage error" "exit $RC"; fi
