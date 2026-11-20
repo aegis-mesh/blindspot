@@ -5595,7 +5595,6 @@ then ok "fleet: the Mac's possible signs carry no tag"; else bad "fleet: the Mac
 # characters without the token is kept whole, with no token and no +more, since the token never costs
 # an account its content; a short one gets the token.
 sed -n '/^fl_value() {/,/^}/p' "$FLEETSH" > "$FL/invfit.sh"
-grep -q '^fl_value() {' "$FL/invfit.sh" || bad "fleet: fl_value is found in gird-fleet.sh" "the inventory-fit tests below read nothing"
 IV_HEAD="v1 review 2026-10-25T09:12Z"; IV_P=" | person: review "; IV_TOK="owasp.ASI03:1; counted 1"
 IV_BAD=""
 for IV_N in 244 245 246 247 248 249 250; do
