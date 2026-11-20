@@ -2820,6 +2820,18 @@ hasnot "a version of it the post does not name is not flagged" 'quartz-markdown-
 has    "a GlassWASM clone in an Open VSX editor's folder is malware" '~/\.cursor/extensions/exargd\.vsblack-0\.0\.1 exargd\.vsblack 0\.0\.1 \(GlassWASM extensions, June 2026\), installed' "$WORK/dz-gw2.txt"
 has    "with Socket's sourced line"                   'GlassWASM extensions, June 2026: clones of Marketplace extensions on Open VSX, built to download and run a second stage\. socket\.dev' "$WORK/dz-gw2.txt"
 hasnot "the clean Marketplace original in VS Code's own folder is not flagged" 'noellee-doc' "$WORK/dz-gw2.txt"
+# Checkmarx's Open VSX extensions (Wiz, March 2026): the two builds published to Open VSX, in an Open VSX
+# editor's folder, with Wiz's sourced line and the incident's advice; not in VS Code's own folder, where Wiz
+# says the Marketplace's versions appear unaffected, nor at another version.
+rm -rf "$WORK/dz-cmx"; cp -R "$WORK/clean" "$WORK/dz-cmx"
+mkdir -p "$WORK/dz-cmx/.cursor/extensions/checkmarx.ast-results-2.53.0" "$WORK/dz-cmx/.windsurf/extensions/checkmarx.cx-dev-assist-1.7.0" \
+  "$WORK/dz-cmx/.vscode/extensions/checkmarx.ast-results-2.53.0" "$WORK/dz-cmx/.cursor/extensions/checkmarx.ast-results-2.52.0"
+dzrun "$WORK/dz-cmx" | tr -s ' \n' '  ' > "$WORK/dz-cmx.txt"
+has    "Checkmarx's ast-results 2.53.0 in an Open VSX editor's folder is malware" '~/\.cursor/extensions/checkmarx\.ast-results-2\.53\.0 checkmarx\.ast-results 2\.53\.0 \(Checkmarx Open VSX extensions, March 2026\), installed' "$WORK/dz-cmx.txt"
+has    "and its cx-dev-assist 1.7.0"                   '~/\.windsurf/extensions/checkmarx\.cx-dev-assist-1\.7\.0 checkmarx\.cx-dev-assist 1\.7\.0 \(Checkmarx Open VSX extensions, March 2026\), installed' "$WORK/dz-cmx.txt"
+has    "with Wiz's sourced line for the Checkmarx extensions" 'Checkmarx Open VSX extensions, March 2026: on activation, fetched and ran a credential stealer where cloud credentials were found\. wiz\.io' "$WORK/dz-cmx.txt"
+has    "and the advice on the service they add"        'On Linux, also check your systemd user services for one you did not add: off CI, this malware adds one that fetches more code every 50 minutes\.' "$WORK/dz-cmx.txt"
+hasnot "the same version in VS Code's own folder is not flagged, nor another version" '\.vscode/extensions/checkmarx|ast-results-2\.52\.0|ast-results 2\.52\.0' "$WORK/dz-cmx.txt"
 # Codex reads a trusted project's .codex/config.toml above the user's file, and a project may set its approvals
 # and sandbox (its docs and config loader): the same settings count there. ~/.codex/config.toml is the person's own.
 rm -rf "$WORK/cxp"; mkdir -p "$WORK/cxp/.codex" "$WORK/cxp/code/p/.codex" "$WORK/cxp/code/q/.codex" "$WORK/cxp/code/r/.codex"

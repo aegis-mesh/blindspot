@@ -223,6 +223,7 @@ Level: **act** means treat the machine as compromised, **update** means update t
 | GlassWorm-linked themes | December 2025 | a VS Code theme cluster tied to GlassWorm; two of its themes ran hidden loaders | act | 2 extensions | [socket.dev](https://socket.dev/blog/glassworm-vscode-themes) |
 | GlassWorm invisible code | March 2026 | hid code in characters that show as blank, which it then decodes and runs | act | npm: 6 versions of 2 packages, 1 extension | [aikido.dev](https://www.aikido.dev/blog/glassworm-returns-unicode-attack-github-npm-vscode) |
 | GlassWASM extensions | June 2026 | clones of Marketplace extensions on Open VSX, built to download and run a second stage | act | 2 extensions | [socket.dev](https://socket.dev/blog/glasswasm-malware-open-vsx-extensions) |
+| Checkmarx Open VSX extensions | March 2026 | on activation, fetched and ran a credential stealer where cloud credentials were found | act | 2 extensions | [wiz.io](https://www.wiz.io/blog/teampcp-attack-kics-github-action) |
 | Injective SDK | July 2026 | sent out the seed phrases and hex private keys of wallets created or loaded with it | update | npm: 1 version of 1 package | [github.com](https://github.com/advisories/GHSA-5fc4-fm2x-6f4r) |
 | Trojanized Claude Code extension | October 2026 | builds served from the Cursor marketplace added an SSH login for the attacker and a reverse tunnel | act | 2 extensions, 6 files, 1 SSH key | [cursor.com](https://cursor.com/blog/claude-code-extension-security-notice) |
 | agent-framework 1.26.1 and 1.26.2 | November 2026 | a .pth file started a credential stealer every time Python started | act | Python: 2 versions, 3 files | [github.com](https://github.com/advisories/GHSA-764m-3ppc-5m73) |
@@ -539,6 +540,13 @@ agent-framework 1.26.1 and 1.26.2, November 2026:
 
 - `exargd.vsblack` 0.0.1 (Open VSX editors only)
 - `noellee-doc.flint-debug` 0.1.1 (Open VSX editors only)
+
+</details>
+
+<details><summary>Checkmarx Open VSX extensions, March 2026: 2 extensions</summary>
+
+- `checkmarx.ast-results` 2.53.0 (Open VSX editors only)
+- `checkmarx.cx-dev-assist` 1.7.0 (Open VSX editors only)
 
 </details>
 

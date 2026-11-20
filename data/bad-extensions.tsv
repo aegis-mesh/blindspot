@@ -116,6 +116,15 @@
 #   JavaScript with steps for macOS, Linux (an @reboot crontab line, sshd) and Windows (both sources), so
 #   it runs wherever that file is found: all. The files it leaves have lines in data/indicators.tsv, and
 #   the SSH key it adds a line in data/ssh-keys.tsv.
+# Checkmarx's Open VSX extensions, March 2026 (checkmarxvsx): Wiz's post on the TeamPCP attack on KICS (its
+#   update of 23 March, 22:35 UTC, and its OpenVSX Payload section). checkmarx.ast-results 2.53.0 and
+#   checkmarx.cx-dev-assist 1.7.0 were published 12 seconds apart at 12:53 UTC on 23 March 2026 from a
+#   compromised account. Wiz says the VS Code Marketplace versions appear unaffected, and the Marketplace
+#   lists neither version (20 November 2026): openvsx. Open VSX no longer serves either. On activation the
+#   payload looks for cloud credentials and, finding any, fetches a credential stealer and runs it through
+#   npx, bunx, pnpx or yarn dlx; Wiz describes no check of the OS before that step: all. Off CI it adds a
+#   systemd user service (Linux), which the incident's advice names; Wiz gives no file name for it, so it
+#   has no line in data/indicators.tsv.
 # id	version	incident	registry	os	marker
 oorzc.ssh-tools	0.5.1	glassworm	openvsx	mac
 oorzc.i18n-tools-plus	1.6.8	glassworm	openvsx	mac
@@ -262,3 +271,5 @@ noellee-doc.flint-debug	0.1.1	glasswasm	openvsx	all
 nrwl.angular-console	18.95.0	nxconsole	any	all
 anthropic.claude-code	2.1.312	claudeext	any	all	134.209.82.225;svc-telemetry
 anthropic.claude-code	2.1.313	claudeext	any	all	134.209.82.225;svc-telemetry
+checkmarx.ast-results	2.53.0	checkmarxvsx	openvsx	all
+checkmarx.cx-dev-assist	1.7.0	checkmarxvsx	openvsx	all
