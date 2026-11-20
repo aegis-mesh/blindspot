@@ -102,10 +102,12 @@ Download the script, check its hash, read it, then run it:
 
 ```sh
 curl -fsSLO https://gird.ai/blindspot/gird-check.sh
-shasum -a 256 gird-check.sh   # compare with the SHA-256 on gird.ai/blindspot
+shasum -a 256 gird-check.sh
 less gird-check.sh
 bash gird-check.sh
 ```
+
+Compare the SHA-256 `shasum` prints with the one on gird.ai/blindspot before you run it.
 
 [gird.ai/blindspot](https://gird.ai/blindspot) has the same steps with the hash check built in, for macOS, Linux, Windows PowerShell and Git Bash. gird.ai serves the script from this repo's `main` branch, so the hash changes with each update.
 

@@ -35,10 +35,10 @@ never runs it. Download `blindspot-fleet.sh`, `gird-check.sh` and `SHA256SUMS` f
 [step 1](fleet.md#1-download-the-file):
 
 ```sh
-grep -E ' (blindspot-fleet|gird-check)\.sh$' SHA256SUMS | shasum -a 256 -c   # prints two lines ending OK
+grep -E ' (blindspot-fleet|gird-check)\.sh$' SHA256SUMS | shasum -a 256 -c
 ```
 
-and give it this prompt in that folder:
+It prints two lines ending `OK`. Then give your coding agent this prompt in that folder:
 
 ```text
 Review blindspot-fleet.sh in this folder before I deploy it to our Macs
@@ -325,8 +325,11 @@ the run finished and 13 when it `failed`.
   (`copy_changed` on each account it did not check);
 - the OWASP tags could not be worked out ([the causes](#owasp-tags));
 - the result could not be saved;
-- it stopped before checking anything ([why](#how-the-one-file-runs)): there is no summary line then,
-  and the inventory field reads `failed: refused <time>: <reason>`.
+- it stopped before checking anything ([why](#how-the-one-file-runs)): there is no summary line then.
+  A stop at one of the checks after the start records why, and the inventory field reads
+  `failed: refused <time>: <reason>`. A start without `-p`, and a hash-key in a saved-result folder
+  that is not root's alone, record nothing: the inventory field keeps its last value until it goes
+  stale, and only your MDM's log of the run (exit 13 and its message) says why.
 
 **`act`** (exit 10): something to act on now:
 
@@ -381,8 +384,10 @@ answer in time, or `ps` could not say whose process holds the LiteLLM loader's l
 - a possible sign: a leftover file that can come from malware, a startup file named like one malware
   installs, or files in the shared `/tmp` named like a malware's markers or gh-token-monitor's logs.
 
-**`clear`** (exit 0): every account was checked in full and nothing was found, and the Mac's own
-check found nothing either.
+**`clear`** (exit 0): every account was checked in full and nothing was found in what fleet mode
+checks, and the Mac's own check found nothing either. Fleet mode leaves four things out, listed at
+the top of this page: an account with a compromised GitHub Action in a project's workflows can read
+`clear` here (issue #57).
 
 ### The summary line
 
@@ -459,8 +464,8 @@ A row that was not checked reads `<account>: not_checked <word>`, with a word fr
 4. Then the details, in the same order. First each `act` account gets `wiper` and its `incidents`, so
    stopping gh-token-monitor and the malware found are never cut for something less urgent. Then each
    row gets all its findings if they fit; the Mac's row drops its last parts until it fits.
-5. The value ends with `+more`, and its parts keep the order of a whole value: the accounts, then
-   `machine:`, `old-install` and `no accounts`.
+5. The value ends with `+more`. Its parts are in this order: the accounts it kept, in order of need,
+   then `machine:`, `old-install` and `no accounts`.
 
 The OWASP part comes last, and only when the whole value fits with it in 250 characters: it never
 costs an account any of its content, and a value that was cut never has it.
@@ -586,7 +591,8 @@ Then:
 | An SSH key without a passphrase (`ssh-open`) | Add one: `ssh-keygen -p -f <key file>`. |
 | A platform that leaked stored secrets (`platforms`) | If they used it, rotate the keys stored there. |
 | A finding under "This Mac" (`machine:`) | A file malware leaves outside every home folder, or a LiteLLM loader that root's own process runs (the row then says the malware ran as root). Treat the Mac as compromised. |
-| A possible sign under "This Mac" or an account (`possible`, `tmp-wiper`, `tmp-marks`) | Files named like a malware's markers in `/tmp`, owned by root or by that account: find out what made them. Any account can leave such a file through a hard link, so alone it is not a finding. |
+| A possible sign on an account (`possible`) | A LiteLLM leftover with nothing else of LiteLLM, or a startup file named like one an extension incident leaves, with no such extension: ask the person to run Blindspot and look at the file it names. |
+| A possible sign under "This Mac" (`possible`, `tmp-wiper`, `tmp-marks`) | Files named like a malware's markers in `/tmp`, owned by root or by an account: find out what made them. Any account can leave such a file through a hard link, so alone it is not a finding. |
 
 **Compromised GitHub Actions are not in fleet results yet.** A person's own report lists each
 workflow in a project's `.github/workflows` that uses a GitHub Action that was compromised. Fleet
@@ -640,9 +646,11 @@ Not followed: what a command prints for the shell to run (`eval "$(...)"`, `sour
 with a command in it, a nested `${...}`, or a zsh glob qualifier other than `(N)`, `(.)` and `(.N)`; a
 path built from a loop's or a function's own variable, inside that loop or function (Oh My Zsh's
 plugins and themes load this way); and the tools' own scripts of `data/tool-scripts.tsv` (nvm's and
-asdf's), only where Homebrew installs them and with the whole path written from Homebrew's prefix. A
-file with such a name anywhere else is read. Only a regular file on a local disk is read: never a
-link, or a file under `/Volumes` or `/Network`, and at most 64 files and 16 MB in all.
+asdf's, which set the tool's variable their own way), in the tool's own folder or where Homebrew
+installs them with the whole path written from Homebrew's prefix. A file a profile sources is read
+only when it is a regular file on a local disk: never through a link, or under `/Volumes` or
+`/Network`. The profiles themselves, fish's `conf.d` files and `ZDOTDIR`'s files are read through a
+link, as the shell reads them. At most 64 files and 16 MB in all.
 
 Some folders outside the home are read by every account's check: npm's global folders in
 `/opt/homebrew/lib` and `/usr/local/lib`, shared Python environments, conda in `/opt`, and the
@@ -706,9 +714,10 @@ they always come from one release.
 To remove it, delete your MDM's items, then run the commands in
 [step 4 of the quick start](fleet.md#4-update-or-remove-it) on each Mac. The `find` command there is
 safe to run as root. It removes only folders root owns, directly in `/private/tmp`, named exactly as
-the run names them. Any account can make a file, folder or link in `/private/tmp` with such a name,
-but not one root owns, and `find` does not follow a link unless told to (`-L`), so a link with such a
-name is not a folder to it and is left alone. `rm -rf` does not follow links inside a folder either.
+the run names them. Any account can make a folder or a link in `/private/tmp` with such a name, but
+not a folder root owns: a hard link to a file root owns is root's, but it is a file, and the command
+takes only folders (`-type d`). `find` does not follow a symbolic link unless told to (`-L`), so a
+link with such a name is not a folder to it and is left alone. `rm -rf` does not follow links inside a folder either.
 The command for the saved result is safe as it is: only root can make anything in `/var/db` and
 `/Library/Application Support`.
 

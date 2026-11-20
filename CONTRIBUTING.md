@@ -90,11 +90,11 @@ Blindspot runs on other people's computers, and in fleet mode as root on every M
 - **Nothing hidden.** No encoded blobs, minified code, binaries or downloaded code. Account for every non-ASCII or control character the change adds, in file contents and file names: invisible and right-to-left characters can make code read differently from how it runs. `gird-check.ps1` stays ASCII, so any such character there is a no. These list them:
 
   ```sh
-  git diff --text origin/main... | tr '\000' '\001' | LC_ALL=C grep -an '^+.*[^[:print:][:blank:]]'
-  git -c core.quotePath=false diff --name-only -z origin/main... | tr '\0' '\n' | LC_ALL=C grep -n '[^ -~]'
+  git diff --text origin/main... | LC_ALL=C tr '\000' '\001' | LC_ALL=C grep -an '^+.*[^[:print:][:blank:]]'
+  git -c core.quotePath=false diff --name-only -z origin/main... | LC_ALL=C tr '\n\000' '\001\n' | LC_ALL=C grep -n '[^ -~]'
   ```
 
-  `--text` shows files git or `.gitattributes` would call binary (an image under `docs/` included), `tr` turns a NUL into a byte grep shows, and `core.quotePath=false` keeps git from quoting a name into plain ASCII.
+  `--text` shows files git or `.gitattributes` would call binary (an image under `docs/` included), `tr` (in the C locale, so a byte that is not UTF-8 never stops it) turns a NUL into a byte grep shows and, in the names, a line feed inside a name into one too, and `core.quotePath=false` keeps git from quoting a name into plain ASCII.
 
 - **Runs nothing it reads** (the rule "Runs nothing it finds" above). Look for `eval`, `Invoke-Expression`, `source`, and any command built from a found name or file content. A found name reaches `sh -c` only as an argument, never inside the command text.
 - **Lists match the scripts.** A change to `data/` passes `bash tools/gen.sh --check`, so the scripts carry exactly the lines you reviewed.
@@ -108,19 +108,23 @@ Blindspot runs on other people's computers, and in fleet mode as root on every M
 The review guard applies the mechanical part of this review: the `review-guard` check runs on every pull request, and `tools/review-guard.sh` reads the diff, runs none of it, and lists what it finds. It is not a required check yet. After the 1.3.0 release merges, a maintainer makes `review-guard` a required check on `main` and creates the `security-reviewed` label; until both are done, a red guard is a signal to the reviewer, not a block on merging. It flags an added invisible, direction-changing, control or NUL character (and any non-ASCII in `gird-check.ps1`), a file name that is not printable ASCII, a binary file other than an image under `docs/` whose bytes are that kind of image, a link, a submodule or a changed file mode, an added line that looks like it runs text as code or calls the network (in a doc, a network command in a fenced code block), running a file named as data or an image, a removed line in `data/`, and any change to `.github/`, `.gitattributes`, the guard, or a file an AI coding agent, editor or shell opening this repository reads or runs (`.claude/`, `.vscode/`, `.mcp.json`, `AGENTS.md`, `CLAUDE.md`, `.envrc` and the others the script's header lists; an agent file it does not list gets no such finding). The script's header lists the exact rules. They match text, so a line written to dodge them (`e\val`, `c''url`, a command built from pieces) gets through: the guard is a tripwire, a red guard is never proof of harm and a green one never proof of safety, and every point above still applies. A finding is not a verdict. A code owner reads each one and, if the change is sound, adds the `security-reviewed` label; only that labeling clears the check, and only for the pull request's head commit at the moment of labeling. A push between your review and the label would be cleared unread, so after adding it, open the run the label started and confirm its line "This clears commit X only" names the commit you reviewed. If it names another, remove the label, review what changed, and add it again. An owner who wrote the pull request can clear the check too, since branch protection still needs the other owner's approval. Any later event on the pull request (a push, an edit, another label) runs the check again and blocks until a code owner adds the label again (removing it first if it is still on), so add it last. The guard and its workflow come from the base branch, so a pull request cannot change the check that judges it. To run it yourself the same way, without running the pull request's own copy of the guard or reading its `.gitattributes`, fetch its commits and run `main`'s guard from a checkout of `main`:
 
 ```sh
-git fetch origin main "pull/N/head:pr-N" && git checkout --detach origin/main
-bash tools/review-guard.sh origin/main pr-N
+git fetch origin main "+pull/N/head:refs/remotes/pr/N" && git checkout --detach origin/main && bash tools/review-guard.sh origin/main refs/remotes/pr/N
 ```
 
 ## Test
 
 ```sh
-bash tests/run.sh            # builds a fake home folder and checks what the script finds and never prints
-bash tests/interactive.sh    # macOS: drives the game and the menu with expect
+bash tests/run.sh
+bash tests/interactive.sh
 shellcheck -s bash -S warning gird-check.sh gird-fleet.sh tools/review-guard.sh tools/review-guard-decide.sh tools/release.sh tests/*.sh
-PWSH=/path/to/pwsh bash tests/run-ps.sh   # the same checks for gird-check.ps1, under PowerShell 7
-PWSH=/path/to/pwsh bash tests/parity-run.sh   # both suites, then checks every bash test has a twin
+PWSH=/path/to/pwsh bash tests/run-ps.sh
+PWSH=/path/to/pwsh bash tests/parity-run.sh
 ```
+
+- `tests/run.sh` builds a fake home folder and checks what the script finds and never prints.
+- `tests/interactive.sh`, on macOS, drives the game and the menu with expect.
+- `tests/run-ps.sh` runs the same checks for `gird-check.ps1`, under PowerShell 7.
+- `tests/parity-run.sh` runs both suites, then checks every bash test has a twin.
 
 `bash tools/ci-local.sh` runs every job in `.github/workflows/ci.yml` on your machine, one at a time. The Ubuntu jobs run in a Linux container when `docker` answers (on a Mac, for example `brew install colima docker && colima start`); without it they are listed as skipped and the run is not a full CI run (exit 2). It exits 1 when a job fails. It runs your working tree, uncommitted changes included, and keeps PowerShell's download in `~/.cache/blindspot-ci`.
 
@@ -142,15 +146,19 @@ To cut a release, merge a `## X.Y.Z, <date>` section in `CHANGELOG.md`. Then, be
 
 ```sh
 git fetch origin --tags && git diff vA.B.C origin/main -- tools/ .github/ .gitattributes .gitmodules
-git checkout --detach origin/main   # straight after, with no fetch in between, so what runs is what you read
+git checkout --detach origin/main
 ```
+
+Check out straight after, with no fetch in between, so what runs is what you read.
 
 Then run:
 
 ```sh
-BLINDSPOT_SIGNING_KEY=/path/to/your/release/key bash tools/release.sh --dry-run X.Y.Z   # every check, no tag or release
+BLINDSPOT_SIGNING_KEY=/path/to/your/release/key bash tools/release.sh --dry-run X.Y.Z
 BLINDSPOT_SIGNING_KEY=/path/to/your/release/key bash tools/release.sh X.Y.Z
 ```
+
+The first does every check and makes no tag or release; the second releases.
 
 It needs git, `gh` signed in, OpenSSH 8.1 or later, and PowerShell (`pwsh` on PATH, or `PWSH=/path/to/pwsh`), which `bash tools/gen.sh` needs to build the Windows one-file fleet script. It stops, running nothing, when a folder on `PATH` is relative or inside the checkout, since a file there named like `git` would run in its place. It stops, publishing nothing, unless the checkout is clean and at `origin/main`, the version is higher than every release, `CHANGELOG.md` has its section and `.github/release-files` names every file people run. It then lists every commit and file changed since the previous release, with the changes to `tools/`, `.github/` and `.gitattributes` in full, shown as text whatever `.gitattributes` says and with every control byte made visible (`^[`), so a commit subject or a changed line cannot redraw the list: review them against the [security review](#security-review) and type the version to go on. Nothing else from the checkout runs before you do. Then, in a copy of the reviewed commit, it runs `bash tools/gen.sh --check` and `bash tools/gen.sh`, and stops if either fails or if a listed file is missing or empty. It refuses a repository whose own git config sets anything `git clone` and `git worktree add` do not write: the repository format and file system settings, `origin`'s URL and fetch line and the remote `gh` records, each branch's remote and merge, and `extensions.worktreeConfig` are allowed, and it names any other setting. If it names one your own tools wrote (an editor, or a clone made with `--no-tags` or `--filter`), release from a fresh `git clone` instead. It also refuses a non-empty `.git/info/attributes`, ignores replace refs, and stops before `gen.sh` runs if any file in its copy of the reviewed commit differs from the commit, or is missing or extra. It signs `SHA256SUMS`, with a line for every listed file, checks that signature against `.github/allowed_signers`, then pushes the signed tag and creates the GitHub release. `ssh-keygen` asks for your key's passphrase itself, once for `SHA256SUMS` and once for the tag.
 

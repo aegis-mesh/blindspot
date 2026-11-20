@@ -84,7 +84,7 @@ unlisted() {
     while IFS= read -r -d '' r; do
       _p=${r#*"$TAB"}; _m=${r%%"$TAB"*}
       case ${_m%% *} in 100755) printf '%s\n' "$_p"; continue ;; 100644) ;; *) continue ;; esac
-      case $_p in *.sh|*.bash|*.zsh|*.ksh|*.fish|*.ps1|*.psm1|*.psd1|*.bat|*.cmd|*.command|*.py|*.pl|*.rb|*.js|*.vbs) printf '%s\n' "$_p"; continue ;; esac
+      case $_p in *.sh|*.bash|*.zsh|*.ksh|*.fish|*.ps1|*.psm1|*.psd1|*.bat|*.cmd|*.command|*.tool|*.py|*.pl|*.rb|*.js|*.mjs|*.cjs|*.vbs|*.vbe|*.jse|*.wsf|*.hta|*.csh|*.tcsh|*.lua) printf '%s\n' "$_p"; continue ;; esac
       [ "$(G cat-file blob "${_m#* }" 2>/dev/null | head -c 2)" != '#!' ] || printf '%s\n' "$_p"
     done
     awk '/^#.*built by bash tools\/gen\.sh/ { b = 1; next } /^[[:space:]]*$/ || /^#/ { b = 0; next } b { sub(/^\//, ""); print }' "$2"

@@ -36,7 +36,7 @@ The first word after `v1` is the Mac's outcome, the worst of its accounts and of
 | `act` | Act now: malware signs, or keys in plain text, shell history, agent sessions, MCP configs or allow lists. | 10 |
 | `not_checked` | An account, or part of one, was not checked. Never read this as clear. | 12 |
 | `review` | Something to change or confirm, not urgent, such as an agent set to run without asking. | 11 |
-| `clear` | Every account was checked in full and nothing was found. | 0 |
+| `clear` | Every account was checked in full and nothing was found in what fleet mode checks. It leaves four things out, compromised GitHub Actions among them: [the list](fleet-reference.md). | 0 |
 | `failed` | The run could not finish safely. | 13 |
 
 The exit codes are for a run whose options leave out `--exit-zero`. Run as your MDM runs it, with no
@@ -82,8 +82,10 @@ Download `blindspot-fleet.sh` and `SHA256SUMS` from the same
 [release](https://github.com/aegis-mesh/blindspot/releases), then check the file:
 
 ```sh
-grep ' blindspot-fleet.sh$' SHA256SUMS | shasum -a 256 -c   # prints blindspot-fleet.sh: OK
+grep ' blindspot-fleet.sh$' SHA256SUMS | shasum -a 256 -c
 ```
+
+It prints `blindspot-fleet.sh: OK`.
 
 When the release also carries `SHA256SUMS.sig`,
 [checking a download](designs/signed-releases.md#checking-a-download) shows how to check that the
@@ -144,7 +146,7 @@ To remove it, delete the MDM's items, then on each Mac remove the saved result, 
 inventory field, any saved-result folder that was moved aside, and ripgrep if you installed it:
 
 ```sh
-sudo /bin/rm -rf /var/db/blindspot /var/db/blindspot.replaced-* "/Library/Application Support/Blindspot"
+sudo /bin/sh -c '/bin/rm -rf /var/db/blindspot /var/db/blindspot.replaced-* "/Library/Application Support/Blindspot"'
 ```
 
 A run your MDM stopped can leave root's work folders in `/private/tmp`. Once no Blindspot check is

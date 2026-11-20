@@ -107,7 +107,10 @@ It needs OpenSSH 8.1 or later for `ssh-keygen -Y verify`: macOS, current Linux d
 OpenSSH client on Windows 10 and 11 where its version is 8.1 or later. Take the files, `SHA256SUMS` and
 `SHA256SUMS.sig` from one release's GitHub page, by its version, so a new release between two
 downloads can't mix versions. `allowed_signers` is the copy of the keys gird.ai serves once it
-serves releases; until then, `.github/allowed_signers` at that release's tag on GitHub. On macOS or
+serves releases. Until then the only copy is `.github/allowed_signers` on GitHub, and a check against
+the copy at the release's own tag shows only that a key in the repository signed it, not who
+released it: anyone who can create a tag can put their own key in that copy. Use the copy from an
+earlier release you already checked when there is one. On macOS or
 Linux, in the folder that holds them:
 
 ```sh

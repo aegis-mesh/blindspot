@@ -219,7 +219,7 @@ for arg in "$@"; do
     --summary-to-stdout) SUMOUT=1 ;;
     --exit-zero) EXITZERO=1 ;;
     --list) LISTONLY=1 ;;
-    --hash-accounts|--hash-accounts=*) fleet_usage "--hash-accounts is not taken as an argument: every account can read root's arguments while it runs, and the MDM keeps them in its logs. Put the secret in $FL_STATE/hash-key instead (docs/fleet.md)" 2 "--hash-accounts was given as an argument" ;;
+    --hash-accounts|--hash-accounts=*) fleet_usage "--hash-accounts is not taken as an argument: every account can read root's arguments while it runs, and the MDM keeps them in its logs. Put the secret in $FL_STATE/hash-key instead (docs/fleet-reference.md, Account names as a keyed hash)" 2 "--hash-accounts was given as an argument" ;;
     --deadline=*) DEADLINE=${arg#*=} ;;
     --inventory) INVENTORY=1 ;;
     --stale-days=*) STALE_DAYS=${arg#*=} ;;
@@ -1172,8 +1172,8 @@ fl_inventory() {
 }
 
 # The inventory value: one line for an MDM's inventory field, no path, file name or key, at most 250
-# characters, in the order the report reads it: the accounts, the Mac's own row, old-install, then no
-# accounts. Too long, it keeps old-install and no accounts, and chooses the rest by need: act, then
+# characters, in the order the report reads it: the accounts (a cut value keeps them in order of need),
+# the Mac's own row, old-install, then no accounts. Too long, it keeps old-install and no accounts, and chooses the rest by need: act, then
 # not_checked, then review, then as many clear ones as fit, the Mac's row before an account at the same
 # level. Details go before rows: every row that fits gets its outcome first, then, by need, an act
 # account its gh-token-monitor and incidents, then each row as much of the rest as fits (the Mac's row
@@ -1496,7 +1496,7 @@ EOF
       [ "$N_PART" -gt 0 ] && printf '    %s\n' "$(fl_plural "$N_PART" "account partly checked: its tags may be incomplete" "accounts partly checked: their tags may be incomplete")"
     fi
     [ -n "$FL_FAILED" ] && printf '\n  The run stopped: the script copy each account runs was changed.\n'
-    [ "$FL_OLDINST" = true ] && printf '\n  An older install of Blindspot, two files and a daily MDM item, is still on this Mac.\n  Remove its daily item first, then its folder: the guide says how (Moving from two files).\n'
+    [ "$FL_OLDINST" = true ] && printf '\n  An older install of Blindspot, two files and a daily MDM item, is still on this Mac.\n  Remove its daily item first, then its install item and its two files (keep rg if you installed\n  ripgrep): docs/fleet.md, Moving from two files.\n'
     for _x in $FL_OWFAIL; do
       case "$_x" in
         code) printf '\n  The run failed: no OWASP tags were worked out, as the rule that works them out holds a line root does not run.\n' ;;

@@ -6,8 +6,9 @@
 #   unreleased  not released: a path (* matches any part of one) people never run from a release
 #
 # Every file people could run is named here: every tracked file, at any depth, that is executable,
-# starts with #!, or ends in .sh, .bash, .zsh, .ksh, .fish, .ps1, .psm1, .psd1, .bat, .cmd,
-# .command, .py, .pl, .rb, .js or .vbs, and every file tools/gen.sh builds. A pull request that
+# starts with #!, or ends in .sh, .bash, .zsh, .ksh, .csh, .tcsh, .fish, .ps1, .psm1, .psd1, .bat,
+# .cmd, .command, .tool, .py, .pl, .rb, .js, .mjs, .cjs, .lua, .vbs, .vbe, .jse, .wsf or .hta, and
+# every file tools/gen.sh builds. A pull request that
 # adds one adds its line too, or says on an unreleased line, with the reason in a comment above it,
 # why it is not released. bash tools/release.sh --check-list checks this, and tests/release.sh
 # runs that check. A released name is letters, digits, ".", "_" and "-".
