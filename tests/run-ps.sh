@@ -3668,7 +3668,7 @@ chmod 000 "$GA/code/ok/.github/workflows/ci.yml"
 GA_RUN "$GA" "$GA/unread.txt"; GA_RUN "$GA" "$GA/unread-sum.txt" compact
 chmod 644 "$GA/code/ok/.github/workflows/ci.yml"
 has    "a workflow file that cannot be read is not called clean" 'GitHub Actions +not fully checked: 1 workflow file could not be read' "$GA/unread.txt"
-has    "and row 05 says so"                             'Recent leaks +workflows not fully checked: files unreadable' "$GA/unread-sum.txt"
+has    "and row 05 says the workflows were not fully checked" 'Recent leaks +workflows not fully checked: files unreadable' "$GA/unread-sum.txt"
 mkdir -p "$GA/code/locked"; chmod 000 "$GA/code/locked"
 GA_RUN "$GA" "$GA/partial.txt"
 chmod 755 "$GA/code/locked"
@@ -4409,10 +4409,11 @@ then ok "owasp: summary rows 01 to 05 stay together, the OWASP line after them";
 if awk '/OWASP Agentic Top 10: ASI02, ASI03, ASI04, ASI05$/ { o = NR; c++ } /^  01  CODING AGENTS/ { h = NR } END { exit !(c == 1 && o && h && o < h) }' "$OW/all.txt" \
   && awk '/OWASP Agentic Top 10: ASI02, ASI03, ASI04, ASI05$/ { o = NR; c++ } /^  01  CODING AGENTS/ { h = NR } END { exit !(c == 1 && o && h && o < h) }' "$OW/all-full.txt"
 then ok "owasp: --full and piped output carry the line at the end of the header"; else bad "owasp: --full and piped output carry the line at the end of the header"; fi
-for _f in "$OW/all.txt" "$OW/all-full.txt"; do
-  if awk '{ l[NR] = $0 } /^   OWASP Agentic Top 10: / { o = NR } END { exit !(o > 2 && l[o - 1] == "" && l[o - 2] ~ /[a-z]/) }' "$_f"
-  then ok "owasp: --full and piped output set the line apart from the stats lines by a blank line"; else bad "owasp: --full and piped output set the line apart from the stats lines by a blank line" "$_f"; fi
-done
+# A blank line before it, after the stats lines: in piped output, then with --full.
+if awk '{ l[NR] = $0 } /^   OWASP Agentic Top 10: / { o = NR } END { exit !(o > 2 && l[o - 1] == "" && l[o - 2] ~ /[a-z]/) }' "$OW/all.txt"
+then ok "owasp: piped output sets the line apart from the stats lines by a blank line"; else bad "owasp: piped output sets the line apart from the stats lines by a blank line"; fi
+if awk '{ l[NR] = $0 } /^   OWASP Agentic Top 10: / { o = NR } END { exit !(o > 2 && l[o - 1] == "" && l[o - 2] ~ /[a-z]/) }' "$OW/all-full.txt"
+then ok "owasp: --full output sets the line apart from the stats lines by a blank line"; else bad "owasp: --full output sets the line apart from the stats lines by a blank line"; fi
 if awk '/OWASP/ { n++; if (length($0) > 60) w = 1 } END { exit !(n >= 8 && !w) }' "$OW/all.txt"; then ok "owasp: every OWASP line fits the narrowest report, 60 columns"
 else bad "owasp: every OWASP line fits the narrowest report, 60 columns" "$(awk '/OWASP/ && length($0) > 60' "$OW/all.txt")"; fi
 # One kind each, as in tests/run.sh. Keys come from the fixture's random ones.
@@ -5426,7 +5427,9 @@ mkdir -p "$MV/conda/miniconda3/etc/profile.d"; printf '%s\n' "export CONDA_EXE='
   mv_case condaps "$PSP" '#region conda initialize' 'If (Test-Path "C:\Users\u\miniconda3\Scripts\conda.exe") {' '    (& "C:\Users\u\miniconda3\Scripts\conda.exe" "shell.powershell" "hook") | Out-String | ?{$_} | Invoke-Expression' '}' '#endregion'
   mv_case omp "$PSP" 'oh-my-posh init pwsh --config "$env:POSH_THEMES_PATH\jandedobbeleer.omp.json" | Invoke-Expression'
   mv_case starship "$PSP" 'Invoke-Expression (&starship init powershell)' '$ENV:STARSHIP_CONFIG = "$HOME\.config\starship.toml"'
-  mv_case starsh .bashrc 'eval "$(starship init bash)"' 'eval "$(oh-my-posh init bash)"' 'source /usr/share/bash-completion/bash_completion'
+  # A sourced file that is not there moves nothing. bash-completion's own script, where it is installed,
+  # reads partly checked (issue #82): the path is one no runner has.
+  mv_case starsh .bashrc 'eval "$(starship init bash)"' 'eval "$(oh-my-posh init bash)"' 'source /usr/share/blindspot-tests/no-such-completion'
   mv_case reads "$PSP" 'if ($env:CLAUDE_CONFIG_DIR) { Write-Host $env:CLAUDE_CONFIG_DIR }' 'if ([Environment]::GetEnvironmentVariable("CODEX_HOME")) { }' '$env:PATH = "$env:PNPM_HOME;$env:PATH"'
 } > "$MV/plain.txt"
 if [ "$(grep -c '=0$' "$MV/plain.txt")" -eq 8 ]; then ok "fleet: nvm, pnpm, conda, oh-my-posh and starship as their installers write them move nothing"
